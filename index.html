@@ -55,6 +55,14 @@ textarea{font-family:Consolas,monospace;font-size:13px;min-height:130px;resize:v
 .ou{text-align:center;font-size:13px;color:var(--doux);text-transform:uppercase;letter-spacing:.08em}
 .outils{display:flex;gap:8px;flex-wrap:wrap}
 .outils button,.outils label{font:inherit;font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid #6b6254;background:transparent;color:var(--fond);cursor:pointer}
+dialog{border:0;border-radius:14px;padding:0;max-width:640px;width:calc(100% - 32px);background:var(--carte);color:var(--encre);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(42,36,27,.55)}
+.dlg{display:flex;flex-direction:column;gap:14px;padding:20px 22px}
+.dlg-tete{display:flex;justify-content:space-between;align-items:center}
+.dlg-tete h2{margin:0;font-size:21px}
+.fermer{width:40px;height:40px;border:1px solid var(--champ);border-radius:8px;background:#fff;font-size:20px;cursor:pointer;color:var(--encre)}
+.sim{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--trait2);font-size:14px}
+.sim small{color:var(--doux)}
 .bandeau{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;padding:10px 32px;background:var(--vertf);color:var(--vert2);font-size:14px}
 .ligne-opt{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--trait2);font-size:14px}
 .bouton{font:inherit;font-size:16px;font-weight:600;padding:13px 22px;border:0;border-radius:10px;background:var(--vert);color:#fff;cursor:pointer}
@@ -96,12 +104,38 @@ td.coche{text-align:center}
     <button role="tab" aria-selected="false" data-onglet="resultat">4 · Résultat</button>
   </nav>
   <div class="outils">
-    <button type="button" id="enregistrer">Enregistrer la simulation</button>
-    <label for="ouvrirFichier">Ouvrir une simulation</label>
-    <input type="file" id="ouvrirFichier" accept=".json,application/json" style="display:none">
+    <button type="button" id="mesSims">Mes simulations</button>
+    <button type="button" id="partager">Partager</button>
     <button type="button" id="nouvelle">Nouvelle simulation</button>
   </div>
 </header>
+<dialog id="dlgSims" aria-labelledby="titreSims">
+  <div class="dlg">
+    <div class="dlg-tete"><h2 id="titreSims">Mes simulations</h2><button type="button" class="fermer" data-fermer aria-label="Fermer">×</button></div>
+    <div class="aide">Gardées dans ce navigateur, sans fichier. Pour les retrouver sur un autre appareil, utilisez « Partager » : le lien ouvre la simulation partout.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="nomSim" placeholder="Nom de la simulation" style="flex:1;min-width:180px" aria-label="Nom de la simulation">
+      <button type="button" class="bouton" id="garderSim" style="padding:9px 16px;font-size:15px">Enregistrer ici</button>
+    </div>
+    <div id="listeSims"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--trait2);padding-top:12px">
+      <button type="button" class="bouton second" id="enregistrer" style="padding:8px 14px;font-size:14px">Exporter dans un fichier</button>
+      <label for="ouvrirFichier" class="bouton second" style="padding:8px 14px;font-size:14px">Importer un fichier</label>
+      <input type="file" id="ouvrirFichier" accept=".json,application/json" style="display:none">
+    </div>
+  </div>
+</dialog>
+<dialog id="dlgPartage" aria-labelledby="titrePartage">
+  <div class="dlg">
+    <div class="dlg-tete"><h2 id="titrePartage">Partager la simulation</h2><button type="button" class="fermer" data-fermer aria-label="Fermer">×</button></div>
+    <div id="partageEtat" class="aide">Préparation du lien…</div>
+    <div style="display:flex;gap:8px">
+      <input id="lienPartage" readonly style="flex:1;font-family:Consolas,monospace;font-size:13px" aria-label="Lien de partage">
+      <button type="button" class="bouton" id="copierLien" style="padding:9px 16px;font-size:15px">Copier</button>
+    </div>
+    <div class="aide">La personne qui ouvre ce lien voit vos saisies et votre résultat, et peut relancer le calcul. Rien n’est modifié chez vous.</div>
+  </div>
+</dialog>
 <div class="bandeau" id="bandeauReprise" hidden>
   <span id="texteReprise"></span>
   <span style="display:flex;gap:8px">
@@ -218,6 +252,7 @@ td.coche{text-align:center}
           <label class="champ">Points en production<input type="number" id="hProd" min="0" value="0"></label>
           <label class="champ">Production<select id="hType"><option value="tout">Toutes ressources</option><option value="0">Bois</option><option value="1">Argile</option><option value="2">Fer</option><option value="3">Céréales</option></select></label>
         </div>
+        <label style="display:flex;gap:10px;align-items:center;font-size:14px"><input type="checkbox" id="hAuto" checked>Le moteur choisit ce que produit le héros pendant les attentes (toutes ressources, ou seulement celle qui manque)</label>
         <fieldset style="border:0;margin:0;padding:0">
           <legend style="font-size:14px;font-weight:500;padding-bottom:8px">Points gagnés ensuite</legend>
           <div class="choix">
@@ -556,6 +591,12 @@ var Moteur = (function () {
   }
   // poste : 'taches' ou 'quotidien' ; ce qui dépasse le dépôt ou le silo est perdu (compté en pertes)
   function ajouterRessources(s, a, poste) {
+    // Récompenses (tâches, quêtes quotidiennes) : le joueur choisit quand encaisser, donc jamais dans un dépôt plein.
+    // Elles restent disponibles (comme l'inventaire du héros) et servent au premier paiement qui en a besoin.
+    if (poste === 'taches' || poste === 'quotidien') {
+      for (var q = 0; q < 4; q++) { s.reserve[q] += a[q]; s.compta[poste][q] += a[q]; }
+      return;
+    }
     var cap = production(s).cap;
     for (var r = 0; r < 4; r++) {
       var x = s.stock[r] + a[r];
@@ -568,6 +609,8 @@ var Moteur = (function () {
   function journaliser(s, j) {
     var p = production(s);
     j.pc = s.pc; j.pop = p.pop; j.pcj = p.pcJour;
+    j.stock = s.stock.map(Math.round); j.cap = p.cap.slice(); // stock juste après l'action (paiement déduit)
+    j.pertes = s.compta.pertes.map(Math.round); // pertes cumulées depuis le début du plan
     s.journal.push(j);
     return j;
   }
@@ -721,6 +764,32 @@ var Moteur = (function () {
     }
     invalider(s);
   }
+  // temps (en secondes) pour réunir ce coût avec la production actuelle
+  function tempsPour(s, cout) {
+    var p = production(s), t = 0;
+    for (var r = 0; r < 4; r++) if (dispo(s, r) < cout[r]) {
+      if (p.net[r] <= 0) return Infinity;
+      t = Math.max(t, (cout[r] - dispo(s, r)) / p.net[r] * H);
+    }
+    return t;
+  }
+  // Le héros produit toutes les ressources (9 par point) ou une seule (30 par point) ; on peut changer à tout moment.
+  // Pendant une attente, on lui fait produire ce qui permet de payer le plus tôt (souvent la ressource qui manque),
+  // au lieu de laisser déborder le silo pendant que le bois manque (constaté le 23/09/2026).
+  var TYPES_HEROS = ['tout', 0, 1, 2, 3];
+  var PRODUIT_HEROS = { tout: 'toutes les ressources', 0: 'du bois', 1: 'de l’argile', 2: 'du fer', 3: 'des céréales' };
+  function choisirProductionHeros(s, cout) {
+    var avant = s.heros.type, best = avant, bt = tempsPour(s, cout);
+    for (var i = 0; i < TYPES_HEROS.length; i++) {
+      var ty = TYPES_HEROS[i];
+      if (ty === avant) continue;
+      s.heros.type = ty; invalider(s);
+      var t = tempsPour(s, cout);
+      if (t < bt - 1) { bt = t; best = ty; }
+    }
+    s.heros.type = best; invalider(s);
+    if (best !== avant && s.journal) journaliser(s, { t: s.t, type: 'heros', label: 'Héros : produire ' + PRODUIT_HEROS[best], gain: 'changement de production du héros' });
+  }
   // attend que le coût soit disponible ; marchand PNJ si activé et utile
   function attendreRessources(s, cout, limite) {
     var guard = 0;
@@ -735,6 +804,7 @@ var Moteur = (function () {
         for (r = 0; r < 4; r++) { tot += dispo(s, r); besoin += cout[r]; }
         if (tot >= besoin) { echangePNJ(s, cout); return true; }
       }
+      if (s.e.heros.auto !== false && s.heros.pts > 0) { choisirProductionHeros(s, cout); p = production(s); }
       var tr = s.t;
       for (r = 0; r < 4; r++) if (dispo(s, r) < cout[r]) {
         if (p.net[r] <= 0) { tr = Infinity; break; }
@@ -1594,7 +1664,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       copies: copies.map(function (c) { return { gid: c.gid, n: c.n }; }),
       bonus25: Array.prototype.map.call(document.querySelectorAll('.b25'), function (x) { return x.checked; }),
       heros: { niveau: +$('hNiv').value || 0, xp: +$('hXp').value || 0, pointsProd: +$('hProd').value || 0, typeProd: typeProd === 'tout' ? 'tout' : +typeProd,
-        mode: document.querySelector('input[name=mode]:checked').value },
+        mode: document.querySelector('input[name=mode]:checked').value, auto: $('hAuto').checked },
       troupes: troupes.slice(), butinHeros: bh, butinTroupes: bt,
       pc: +$('pc').value || 0, feteFinDans: ff !== null && ic !== null && ff > ic ? (ff - ic) / 1000 : null,
       quotidien: +$('quotidien').value,
@@ -1767,7 +1837,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       ['Stock actuel (village et inventaire du héros)', dispoAct, ''],
       ['+ Production (champs, héros, bonus)', cpt.prod, ''],
       ['+ Pillage', cpt.pillage, 'sous'],
-      ['+ Récompenses des tâches', cpt.taches, ''],
+      ['+ Récompenses des tâches (encaissées quand elles servent)', cpt.taches, ''],
       ['+ Quêtes quotidiennes', cpt.quotidien, 'sous'],
       ['± Marchand PNJ', cpt.pnj, 'sous'],
       ['− Consommation (population, troupes, héros)', col(function (r) { return -(cpt.conso[r] - cpt.famine[r]); }), ''],
@@ -1777,7 +1847,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       ['− Fêtes', col(function (r) { return -d.fetes[r]; }), ''],
       ['− Troupes et colons', col(function (r) { return -d.troupes[r]; }), ''],
       ['− Départ des colons (750 de chaque)', col(function (r) { return -d.depart[r]; }), ''],
-      ['= Stock au départ des colons', m.stockFinal, 'total']
+      ['= Reste au départ des colons (village, inventaire et récompenses pas encore utilisées)', m.stockFinal, 'total']
     ];
     $('rBalance').innerHTML = lignesB.filter(function (l) { return l[2] !== 'sous' || som(l[1].map(Math.abs)) >= 0.5; }).map(function (l) {
       return '<tr class="' + l[2] + '"><td>' + l[0] + '</td>' + l[1].map(function (v) { return '<td>' + fmt(v) + '</td>'; }).join('') + '<td>' + fmt(som(l[1])) + '</td></tr>';
@@ -1862,16 +1932,132 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   $('nouvelle').onclick = function () {
     if (!confirm('Effacer toutes les saisies et repartir d’une simulation vierge ?')) return;
     try { localStorage.removeItem(CLE); } catch (x) { /* rien */ }
-    location.reload();
+    location.href = location.pathname; // sans lien de partage
   };
+
+  // ---------- compression (liens de partage, sauvegardes du navigateur) ----------
+  function b64url(octets) {
+    var bin = '';
+    for (var i = 0; i < octets.length; i += 0x8000) bin += String.fromCharCode.apply(null, octets.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function deb64url(s) {
+    var bin = atob(s.replace(/-/g, '+').replace(/_/g, '/')), o = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) o[i] = bin.charCodeAt(i);
+    return o;
+  }
+  function compresser(texte) {
+    if (!window.CompressionStream) return Promise.resolve('j' + b64url(new TextEncoder().encode(texte)));
+    var flux = new Blob([texte]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return new Response(flux).arrayBuffer().then(function (b) { return 'z' + b64url(new Uint8Array(b)); });
+  }
+  function decompresser(code) {
+    var octets = deb64url(code.slice(1));
+    if (code[0] === 'j') return Promise.resolve(new TextDecoder().decode(octets));
+    var flux = new Blob([octets]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Response(flux).text();
+  }
+  // ce qu'on garde ou partage : saisies, cases « Fait » et résultat (sans les actions détaillées des scénarios)
+  function allege() {
+    var d = capturer();
+    if (d.resultat && d.resultat.r) {
+      d.resultat = { e: d.resultat.e, r: Object.assign({}, d.resultat.r, { scenarios: (d.resultat.r.scenarios || []).map(function (x) { return Object.assign({}, x, { actions: undefined }); }) }) };
+    }
+    return d;
+  }
+  function ouvrirDialogue(id) { var d = $(id); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  document.querySelectorAll('[data-fermer]').forEach(function (b) { b.onclick = function () { b.closest('dialog').close(); }; });
+
+  // ---------- Mes simulations : sauvegardes nommées, dans ce navigateur ----------
+  var CLE_LISTE = 'course2eVillage.mesSimulations';
+  function lireListe() { try { return JSON.parse(localStorage.getItem(CLE_LISTE) || '[]'); } catch (x) { return []; } }
+  function ecrireListe(l) { localStorage.setItem(CLE_LISTE, JSON.stringify(l)); }
+  function dessinerListe() {
+    var l = lireListe();
+    $('listeSims').innerHTML = l.length ? l.map(function (x, i) {
+      var d = new Date(x.date);
+      return '<div class="sim"><span>' + x.nom.replace(/</g, '&lt;') + '<br><small>' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' à ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + (x.depart ? ' · départ ' + x.depart : '') + '</small></span>' +
+        '<button type="button" class="bouton" data-ouvrir="' + i + '" style="padding:7px 12px;font-size:14px">Ouvrir</button>' +
+        '<button type="button" class="bouton second" data-suppr="' + i + '" style="padding:7px 12px;font-size:14px" aria-label="Supprimer ' + x.nom.replace(/"/g, '') + '">Supprimer</button></div>';
+    }).join('') : '<div class="aide">Aucune simulation enregistrée dans ce navigateur.</div>';
+    $('listeSims').querySelectorAll('[data-ouvrir]').forEach(function (b) {
+      b.onclick = function () {
+        var x = lireListe()[+b.dataset.ouvrir];
+        decompresser(x.code).then(function (t) { restaurer(JSON.parse(t)); $('dlgSims').close(); message('Simulation « ' + x.nom + ' » ouverte.', 'ok'); memoriser(); })
+          .catch(function (err) { message('Impossible d’ouvrir « ' + x.nom + ' » : ' + err.message, 'err'); });
+      };
+    });
+    $('listeSims').querySelectorAll('[data-suppr]').forEach(function (b) {
+      b.onclick = function () {
+        var l2 = lireListe(), x = l2[+b.dataset.suppr];
+        if (!confirm('Supprimer la simulation « ' + x.nom + ' » de ce navigateur ?')) return;
+        l2.splice(+b.dataset.suppr, 1); ecrireListe(l2); dessinerListe();
+      };
+    });
+  }
+  $('mesSims').onclick = function () {
+    var d = new Date();
+    if (!$('nomSim').value) $('nomSim').value = 'Simulation du ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + 'h' + pad(d.getMinutes());
+    dessinerListe(); ouvrirDialogue('dlgSims');
+  };
+  $('garderSim').onclick = function () {
+    var nom = $('nomSim').value.trim() || 'Simulation';
+    var depart = resultat && resultat.r && resultat.r.meilleur ? $('rDepartServ').textContent.split(' ')[0] : '';
+    compresser(JSON.stringify(allege())).then(function (code) {
+      var l = lireListe().filter(function (x) { return x.nom !== nom; }); // même nom : remplacée
+      l.unshift({ nom: nom, date: new Date().toISOString(), depart: depart, code: code });
+      try { ecrireListe(l); dessinerListe(); message('« ' + nom + ' » enregistrée dans ce navigateur.', 'ok'); }
+      catch (x) { message('Enregistrement impossible : stockage du navigateur plein ou bloqué.', 'err'); }
+    });
+  };
+
+  // ---------- Partager : un lien qui ouvre la simulation chez n'importe qui ----------
+  // Lien court si la base Firebase du projet accepte l'enregistrement (chemin course2e/partages),
+  // sinon lien autonome qui contient toute la simulation compressée.
+  var BASE_PARTAGE = 'https://travian---planning-default-rtdb.europe-west1.firebasedatabase.app/course2e/partages/';
+  function idAleatoire() {
+    var a = new Uint8Array(10), c = 'abcdefghijkmnpqrstuvwxyz23456789', s = '';
+    crypto.getRandomValues(a); for (var i = 0; i < a.length; i++) s += c[a[i] % c.length];
+    return s;
+  }
+  $('partager').onclick = function () {
+    $('lienPartage').value = ''; $('partageEtat').textContent = 'Préparation du lien…'; ouvrirDialogue('dlgPartage');
+    var adresse = location.origin + location.pathname;
+    compresser(JSON.stringify(allege())).then(function (code) {
+      var id = idAleatoire();
+      return fetch(BASE_PARTAGE + id + '.json', { method: 'PUT', body: JSON.stringify(code) })
+        .then(function (rep) { if (!rep.ok) throw new Error('refus ' + rep.status); return adresse + '?p=' + id; })
+        .then(function (lien) { return { lien: lien, court: true }; },
+          function () { return { lien: adresse + '#s=' + code, court: false }; });
+    }).then(function (x) {
+      $('lienPartage').value = x.lien;
+      $('partageEtat').textContent = x.court ? 'Lien court, valable sur tous les appareils.'
+        : 'Lien autonome : il contient toute la simulation (' + Math.round(x.lien.length / 1024) + ' Ko). Il fonctionne partout, mais il est long pour certaines messageries.';
+    });
+  };
+  $('copierLien').onclick = function () {
+    var v = $('lienPartage').value; if (!v) return;
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { $('copierLien').textContent = 'Copié'; setTimeout(function () { $('copierLien').textContent = 'Copier'; }, 2000); },
+      function () { $('lienPartage').select(); document.execCommand('copy'); });
+  };
+  function ouvrirPartage() {
+    var p = new URLSearchParams(location.search).get('p');
+    var h = location.hash.indexOf('#s=') === 0 ? location.hash.slice(3) : null;
+    if (!p && !h) return false;
+    var charge = p ? fetch(BASE_PARTAGE + encodeURIComponent(p) + '.json').then(function (r) { if (!r.ok) throw new Error('lien introuvable'); return r.json(); }) : Promise.resolve(h);
+    charge.then(function (code) { if (!code) throw new Error('lien introuvable ou expiré'); return decompresser(code); })
+      .then(function (t) { restaurer(JSON.parse(t)); message('Simulation partagée ouverte. Pour la garder : « Mes simulations » → « Enregistrer ici ».', 'ok'); if (resultat) ouvrir('resultat'); })
+      .catch(function (err) { message('Impossible d’ouvrir la simulation partagée : ' + err.message + '.', 'err'); });
+    return true;
+  }
   document.addEventListener('input', memoriser);
   document.addEventListener('change', memoriser);
   document.addEventListener('click', function (ev) { if (ev.target.closest('.retirer,#ajouterCopie')) memoriser(); });
 
   dessinerChamps(); dessinerBats(); dessinerCopies(); dessinerUnites(); controler();
 
-  // dernière saisie de ce navigateur : proposée, jamais imposée (l'outil démarre vierge)
-  try {
+  // lien de partage ; sinon, dernière saisie de ce navigateur : proposée, jamais imposée (l'outil démarre vierge)
+  if (!ouvrirPartage()) try {
     var memo = JSON.parse(localStorage.getItem(CLE) || 'null');
     if (memo && memo.saisie) {
       var dm = new Date(memo.enregistreLe);
