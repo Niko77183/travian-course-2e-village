@@ -2386,18 +2386,28 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     }
     return { fete: 'Petite fête', colon: 'Colons', attente: 'Attendre la fin du chantier en cours', depart: 'Départ des 3 colons' }[l.t];
   }
+  // niveau avant la ligne k : celui du village (onglet 1), relevé par les lignes précédentes
   function auDepart(l, k) {
+    var nc = champs.map(function (c) { return c.n; }), nb = Object.assign({}, niveaux), ncop = copies.map(function (c) { return c.n; }), crees = 0;
+    for (var q = 0; q < k; q++) {
+      var p = strat[q];
+      if (p.t === 'champ') champs.forEach(function (c, i) { if (p.cible === 'i' + i || (p.cible[0] === 'r' && (+p.cible.slice(1) === 0 || +p.cible.slice(1) === c.r))) nc[i] = Math.max(nc[i], +p.niveau); });
+      else if (p.t === 'bat' && p.c === 'nouveau') { ncop[copies.length + crees] = +p.niveau; crees++; }
+      else if (p.t === 'bat' && p.c >= 0) ncop[p.c] = Math.max(ncop[p.c] || 0, +p.niveau);
+      else if (p.t === 'bat') nb[p.gid] = Math.max(nb[p.gid] || 0, +p.niveau);
+    }
     if (l.t === 'champ') {
-      if (l.cible[0] === 'i') return champs[+l.cible.slice(1)].n;
-      var ns = champs.filter(function (c) { return +l.cible.slice(1) === 0 || c.r === +l.cible.slice(1); }).map(function (c) { return c.n; });
+      if (l.cible[0] === 'i') return nc[+l.cible.slice(1)];
+      var ns = nc.filter(function (n, i) { return +l.cible.slice(1) === 0 || champs[i].r === +l.cible.slice(1); });
       var a = Math.min.apply(null, ns), b = Math.max.apply(null, ns);
       return a === b ? a : a + ' – ' + b;
     }
     if (l.t === 'bat' && l.c === 'nouveau') return '—';
-    if (l.t === 'bat') { if (l.c >= 0) { var x = copies[l.c]; return x ? x.n : '—'; } return niveaux[l.gid] || 0; }
+    if (l.t === 'bat') return l.c >= 0 ? (ncop[l.c] !== undefined ? ncop[l.c] : '—') : (nb[l.gid] || 0);
     if (l.t === 'troupe') return fmt(troupes[+l.u] || 0);
     return '';
   }
+  function majActuels() { document.querySelectorAll('#sLignes tr').forEach(function (tr) { var k = +tr.dataset.l; if (strat[k]) tr.children[2].textContent = auDepart(strat[k], k); }); }
   function maxLigne(l) {
     if (l.t === 'champ') return 20;
     if (l.t === 'bat') return BAT[+l.gid] ? BAT[+l.gid].niveauMax : 20;
@@ -2534,6 +2544,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (!(v >= 1)) return; // saisie en cours
     l[k] = Math.min(maxLigne(l), v);
     planifierStrat();
+    if (k === 'niveau') majActuels();
   });
 
   // ---------- démarrage ----------
