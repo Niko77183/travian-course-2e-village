@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="1790194843230">
+<meta name="version" content="1790195698573">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +132,9 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+.defile.eclair{animation:eclair .9s ease-out}
+@keyframes eclair{from{box-shadow:0 0 0 3px rgba(47,93,58,.35)}to{box-shadow:0 0 0 3px rgba(47,93,58,0)}}
+#sMaj{color:var(--vert2);font-weight:500;min-height:18px}
 .retirer.petit{width:26px;height:26px;font-size:14px;border-radius:7px}
 .retraits{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .puce{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 11px;border-radius:999px;background:var(--rougef);color:var(--rouge);font-size:13px;font-weight:500}
@@ -437,6 +440,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
         <label>Héros <select id="sHeros"><option value="production">en production</option><option value="combat">en combat (pille)</option></select></label>
         <label><input type="checkbox" id="sAuto" checked> Ajouter les prérequis manquants et agrandir dépôt ou silo si besoin</label>
       </div>
+      <div id="sMaj" class="aide" aria-live="polite"></div>
       <div class="defile"><table class="strat"><thead><tr><th class="n">#</th><th>Action</th><th class="n">Actuel</th><th class="n">Visé</th><th class="n" title="Date et heure où la ligne entière est payable (pour plusieurs niveaux : les ressources du dernier niveau)">Ressources réunies</th><th class="n" title="Temps avant d’avoir ces ressources, depuis le lancement de la ligne précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Coût</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">Population</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">PC / jour</th><th class="n">PC cumulés</th><th class="c">Faisable</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
       <div id="sVide" class="aide">Aucune ligne pour l’instant : ajoutez-en, ou partez du plan retenu par le moteur (onglet 4) pour le retoucher.</div>
     </section>
@@ -2519,8 +2523,22 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     e.exclusions = []; // vos lignes sont vos choix : les retraits ne visent que les propositions du moteur
     try { r = Moteur.strategie(e, strat.map(versMoteur), { auto: $('sAuto').checked }); }
     catch (x) { $('sResultat').style.display = 'flex'; $('sAlertes').innerHTML = '<div class="msg err">Calcul impossible : ' + esc(x.message) + '</div>'; return; }
+    var avant = derniereStrat;
     derniereStrat = r;
     afficherStrat(e, r);
+    signalerMaj(avant, r, instantCollage() || Date.now());
+  }
+  // chaque recalcul est signalé : départ inchangé, avancé ou retardé, et le tableau s'éclaire un instant
+  function signalerMaj(avant, r, base) {
+    var h = new Date(), quand = pad(h.getHours()) + ':' + pad(h.getMinutes()) + ':' + pad(h.getSeconds()), txt;
+    if (!avant) txt = 'Calculé';
+    else if (r.depart === null || avant.depart === null) txt = 'Recalculé' + (r.depart !== null ? ' : départ le ' + fmtDate(base + r.depart * 1000) : ' : pas de départ');
+    else {
+      var d = r.depart - avant.depart;
+      txt = 'Recalculé : ' + (Math.abs(d) < 60 ? 'départ inchangé (' + fmtDate(base + r.depart * 1000) + ')' : 'départ ' + (d < 0 ? 'avancé' : 'retardé') + ' de ' + duree(Math.abs(d)) + ' (' + fmtDate(base + r.depart * 1000) + ')');
+    }
+    $('sMaj').textContent = txt + ' · ' + quand;
+    ['sLignes', 'sPlanning'].forEach(function (id) { var x = $(id).closest('.defile'); x.classList.remove('eclair'); void x.offsetWidth; x.classList.add('eclair'); });
   }
   function planifierStrat() { clearTimeout(minuterieStrat); minuterieStrat = setTimeout(function () { calculerStrat(); memoriser(); }, 250); }
   function afficherStrat(e, r) {
@@ -2536,7 +2554,9 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       c('pop').textContent = x.pop != null ? fmt(x.pop) : '—';
       c('pcj').textContent = x.pcj != null ? fmt(x.pcj) : '—';
       c('pc').textContent = x.pc != null ? fmt(Math.floor(x.pc)) : '—';
-      c('etat').innerHTML = x.ok ? pastille(true, 'Oui') : '<span class="pastille non">Non</span><span class="raison">' + esc(x.raison) + '</span>';
+      var rien = x.ok && x.debut === null && x.faits === 0 && strat[+tr.dataset.l].t !== 'depart';
+      if (rien) { c('res').textContent = '—'; c('att').textContent = '—'; c('pnj').innerHTML = ''; }
+      c('etat').innerHTML = rien ? '<span class="pastille neutre" title="Rien à faire : un niveau égal ou supérieur est déjà atteint par le village ou par une ligne précédente (prérequis compris)">Déjà atteint</span>' : x.ok ? pastille(true, 'Oui') : '<span class="pastille non">Non</span><span class="raison">' + esc(x.raison) + '</span>';
     });
     $('sResultat').style.display = 'flex';
     // départ des colons, comparé au plan du moteur
