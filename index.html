@@ -74,6 +74,12 @@ th{text-align:left;font-weight:500;color:var(--doux);padding:8px 8px 8px 0;borde
 td{padding:8px 8px 8px 0;border-top:1px solid var(--trait2);vertical-align:top}
 tr.tache td{background:#eef4e7}tr.depart td{font-weight:600}tr.info td{color:var(--doux)}
 td.n{font-family:Consolas,monospace;white-space:nowrap}
+table.balance td:not(:first-child),table.balance th:not(:first-child){text-align:right;font-family:Consolas,monospace;white-space:nowrap}
+table.balance tr.sous td{color:var(--doux)}
+table.balance tr.total td{font-weight:600;border-top:2px solid var(--trait)}
+tr.fait td{color:var(--doux);text-decoration:line-through}
+tr.fait td:last-child{text-decoration:none}
+td.coche{text-align:center}
 .trois{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .somme{display:flex;justify-content:space-between;font-size:14px}.somme.t{border-top:1px solid var(--trait);padding-top:8px;font-weight:600}
 @media (max-width:900px){.grille,.kpis,.trois{grid-template-columns:1fr}main{padding:16px}header{padding:14px 16px}.l4{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -296,15 +302,22 @@ td.n{font-family:Consolas,monospace;white-space:nowrap}
       <div class="aide">Chaque feuille de route du guide T4.6 est adaptée à votre village (étapes déjà faites sautées), jouée telle quelle, puis ajustée par le moteur ; la recherche libre du moteur concourt aussi. Il y a toujours au moins un plan.</div>
       <div class="defile"><table><thead><tr><th>Scénario</th><th>Départ</th><th>Écart</th><th>PC / jour après</th><th>Ressources / h après</th></tr></thead><tbody id="rScenarios"></tbody></table></div>
     </section>
+    <div class="trois">
+      <section class="carte"><h2>Dépensé à ce stade</h2><div class="aide">Coût de tout ce qui existe déjà : chaque niveau des champs et bâtiments, exemplaires compris, et les troupes.</div><div id="rAcquis"></div></section>
+      <section class="carte"><h2>Produit depuis l’ouverture</h2><div class="aide">Estimation : ce qui a été dépensé, plus le stock actuel, moins le stock de départ.</div><div id="rProduit"></div></section>
+      <section class="carte"><h2>Manquant pour l’objectif</h2><div class="aide">Ce que le plan doit encore payer jusqu’au départ des colons, moins le stock actuel et l’inventaire du héros.</div><div id="rManques"></div></section>
+    </div>
+    <section class="carte">
+      <h2>Balance des ressources jusqu’au départ des colons</h2>
+      <div class="aide">Tout ce qui entre et sort du village pendant le plan. La dernière ligne est le stock qui reste une fois les colons partis.</div>
+      <div class="defile"><table class="balance"><thead><tr><th></th><th>Bois</th><th>Argile</th><th>Fer</th><th>Céréales</th><th>Total</th></tr></thead><tbody id="rBalance"></tbody></table></div>
+    </section>
     <section class="carte">
       <h2>Planning</h2>
-      <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
+      <div class="aide">Population et PC par jour : ceux du village une fois l’action terminée. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation.</div>
+      <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th>Population · PC/jour</th><th>PC cumulés</th><th>Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
     </section>
-    <div class="trois">
-      <section class="carte"><h2>Ressources dépensées</h2><div id="rDepenses"></div></section>
-      <section class="carte"><h2>Ressources manquantes</h2><div id="rManques"></div></section>
-      <section class="carte"><h2>Or, par fonction</h2><div id="rOrDetail"></div></section>
-    </div>
+    <section class="carte" style="max-width:520px"><h2>Or, par fonction</h2><div id="rOrDetail"></div></section>
     <div id="rAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
 </div>
@@ -371,7 +384,8 @@ var Moteur = (function () {
       rang: null,
       prochainReset: 0,
       or: { plus: 0, bonus: 0, fin: 0, pnj: 0, maitre: 0 },
-      depense: { champs: [0, 0, 0, 0], batiments: [0, 0, 0, 0], troupes: [0, 0, 0, 0] },
+      depense: { champs: [0, 0, 0, 0], batiments: [0, 0, 0, 0], fetes: [0, 0, 0, 0], troupes: [0, 0, 0, 0], depart: [0, 0, 0, 0] },
+      compta: { prod: [0, 0, 0, 0], pillage: [0, 0, 0, 0], conso: [0, 0, 0, 0], taches: [0, 0, 0, 0], quotidien: [0, 0, 0, 0], pertes: [0, 0, 0, 0], famine: [0, 0, 0, 0], pnj: [0, 0, 0, 0] },
       famine: false,
       journal: null,
       _prod: null
@@ -413,7 +427,8 @@ var Moteur = (function () {
       bonusTemp: s.bonusTemp.slice(), plusTempFin: s.plusTempFin,
       rang: new Int8Array(s.rang), prochainReset: s.prochainReset,
       or: { plus: s.or.plus, bonus: s.or.bonus, fin: s.or.fin, pnj: s.or.pnj, maitre: s.or.maitre },
-      depense: { champs: s.depense.champs.slice(), batiments: s.depense.batiments.slice(), troupes: s.depense.troupes.slice() },
+      depense: { champs: s.depense.champs.slice(), batiments: s.depense.batiments.slice(), fetes: s.depense.fetes.slice(), troupes: s.depense.troupes.slice(), depart: s.depense.depart.slice() },
+      compta: { prod: s.compta.prod.slice(), pillage: s.compta.pillage.slice(), conso: s.compta.conso.slice(), taches: s.compta.taches.slice(), quotidien: s.compta.quotidien.slice(), pertes: s.compta.pertes.slice(), famine: s.compta.famine.slice(), pnj: s.compta.pnj.slice() },
       famine: s.famine, journal: null, _prod: null
     };
   }
@@ -522,9 +537,9 @@ var Moteur = (function () {
           // base × (1 + 2 % × (niveau − 1)), en calcul entier pour éviter 1 709,999… au lieu de 1 710
           var pour100 = 100 + 2 * Math.max(0, s.heros.niv - 1); // héros niveau 0 ou 1 : pas de bonus
           var res = Math.floor(p.baseRessources * pour100 / 100), xp = Math.floor(p.baseXP * pour100 / 100);
-          ajouterRessources(s, [res, res, res, res]);
+          ajouterRessources(s, [res, res, res, res], 'taches');
           s.rang[i]++;
-          if (s.journal) s.journal.push({ t: s.t, type: 'tache', label: 'Encaisser la tâche « ' + tc.nom + ' » (' + p.palier + ')', gain: '+' + res + ' de chaque · +' + xp + ' XP', tache: true });
+          if (s.journal) journaliser(s, { t: s.t, type: 'tache', label: 'Encaisser la tâche « ' + tc.nom + ' » (' + p.palier + ')', gain: '+' + res + ' de chaque · +' + xp + ' XP', tache: true });
           gagnerXp(s, xp);
           encore = true;
         }
@@ -536,12 +551,25 @@ var Moteur = (function () {
     while (s.heros.xp >= xpPourNiveau(s.heros.niv + 1)) {
       s.heros.niv++;
       if (s.heros.mode === 'production') { s.heros.pts += 4; invalider(s); }
-      if (s.journal) s.journal.push({ t: s.t, type: 'heros', label: 'Héros niveau ' + s.heros.niv, gain: s.heros.mode === 'production' ? '+4 points en production' : '+4 points en force' });
+      if (s.journal) journaliser(s, { t: s.t, type: 'heros', label: 'Héros niveau ' + s.heros.niv, gain: s.heros.mode === 'production' ? '+4 points en production' : '+4 points en force' });
     }
   }
-  function ajouterRessources(s, a) {
+  // poste : 'taches' ou 'quotidien' ; ce qui dépasse le dépôt ou le silo est perdu (compté en pertes)
+  function ajouterRessources(s, a, poste) {
     var cap = production(s).cap;
-    for (var r = 0; r < 4; r++) s.stock[r] = Math.min(cap[r], s.stock[r] + a[r]);
+    for (var r = 0; r < 4; r++) {
+      var x = s.stock[r] + a[r];
+      if (poste) s.compta[poste][r] += a[r];
+      if (x > cap[r]) { s.compta.pertes[r] += x - cap[r]; x = cap[r]; }
+      s.stock[r] = x;
+    }
+  }
+  // entrée du journal, avec l'état du village à cet instant (population, PC par jour, PC cumulés)
+  function journaliser(s, j) {
+    var p = production(s);
+    j.pc = s.pc; j.pop = p.pop; j.pcj = p.pcJour;
+    s.journal.push(j);
+    return j;
   }
 
   // ---------- le temps ----------
@@ -558,20 +586,25 @@ var Moteur = (function () {
   function couler(s, t) {
     var dt = t - s.t;
     if (dt <= 0) return;
-    var p = production(s);
+    var p = production(s), c = s.compta;
     for (var r = 0; r < 4; r++) {
-      var x = s.stock[r] + p.net[r] * dt / H;
-      if (x < 0) { x = 0; if (r === 3) s.famine = true; }
-      s.stock[r] = Math.min(p.cap[r], x);
+      // comptabilité : production (champs + héros + bonus), pillage, consommation (céréales), pertes
+      var prod = (p.champs[r] + p.heros[r] + p.bonus[r]) * dt / H, pil = p.pillage / 4 * dt / H, co = r === 3 ? p.conso * dt / H : 0;
+      c.prod[r] += prod; c.pillage[r] += pil; c.conso[r] += co;
+      var x = s.stock[r] + prod + pil - co;
+      if (x < 0) { c.famine[r] += -x; x = 0; if (r === 3) s.famine = true; }
+      if (x > p.cap[r]) { c.pertes[r] += x - p.cap[r]; x = p.cap[r]; }
+      s.stock[r] = x;
     }
     s.pc += p.pcJour * dt / J;
     s.t = t;
   }
   function traiterEvenements(s) {
-    var i, change = false;
+    var i, change = false, finis = [];
     for (i = s.lanes.length - 1; i >= 0; i--) if (s.lanes[i].fin <= s.t + 1e-6) {
       var l = s.lanes.splice(i, 1)[0];
       if (l.champ) s.champs[l.cle].n++; else if (l.copie >= 0) s.copies[l.copie].n++; else s.bat[l.cle]++;
+      if (l.j) finis.push(l.j);
       change = true;
     }
     for (i = s.form.length - 1; i >= 0; i--) if (s.form[i].fin <= s.t + 1e-6) {
@@ -582,7 +615,12 @@ var Moteur = (function () {
     if (s.colonFin >= 0 && s.colonFin <= s.t + 1e-6) { s.colonsFaits++; s.colonFin = -1; change = true; }
     if (s.prochainReset <= s.t + 1e-6) { recompenseQuotidienne(s); s.prochainReset += J; change = true; }
     for (var r = 0; r < 4; r++) if (s.bonusTemp[r] > 0 && s.bonusTemp[r] <= s.t + 1e-6) { s.bonusTemp[r] = 0; change = true; }
-    if (change) { invalider(s); encaisserTaches(s); }
+    if (change) {
+      invalider(s);
+      // population et PC par jour d'une construction : ceux du village une fois le chantier terminé
+      if (finis.length) { var pf = production(s); finis.forEach(function (j) { j.pop = pf.pop; j.pcj = pf.pcJour; }); }
+      encaisserTaches(s);
+    }
   }
   function avancerJusqua(s, t) {
     var guard = 0;
@@ -606,7 +644,7 @@ var Moteur = (function () {
       var q = jour % 4;
       if (q === 0) { gagnerXp(s, 50); gains.push('+50 XP'); }
       else if (q === 1) { s.pc += 50; gains.push('+50 PC'); }
-      else if (q === 3) { ajouterRessources(s, [200, 200, 200, 200]); gains.push('+200 de chaque'); }
+      else if (q === 3) { ajouterRessources(s, [200, 200, 200, 200], 'quotidien'); gains.push('+200 de chaque'); }
       else gains.push('1 000 d’une ressource au hasard (non comptés)');
     }
     if (palier >= 50) {
@@ -617,12 +655,12 @@ var Moteur = (function () {
     if (palier >= 100) {
       var c = jour % 4;
       if (c === 1) { gagnerXp(s, 400); gains.push('+400 XP'); }
-      else if (c === 2) { ajouterRessources(s, [4000, 4000, 4000, 4000]); gains.push('+4 000 de chaque'); }
+      else if (c === 2) { ajouterRessources(s, [4000, 4000, 4000, 4000], 'quotidien'); gains.push('+4 000 de chaque'); }
       else if (c === 3) { s.pc += 400; gains.push('+400 PC'); }
       else gains.push('20 000 d’une ressource au hasard (non comptés)');
     }
     invalider(s);
-    if (s.journal && gains.length) s.journal.push({ t: s.t, type: 'quotidien', label: 'Quêtes quotidiennes (palier ' + palier + ')', gain: gains.join(' · ') });
+    if (s.journal && gains.length) journaliser(s, { t: s.t, type: 'quotidien', label: 'Quêtes quotidiennes (palier ' + palier + ')', gain: gains.join(' · ') });
   }
 
   // ---------- conditions d'une action ----------
@@ -712,13 +750,16 @@ var Moteur = (function () {
     return false;
   }
   function echangePNJ(s, cout) {
-    var cap = production(s).cap, tot = 0, besoin = 0, r;
-    for (r = 0; r < 4; r++) { tot += s.stock[r]; besoin += cout[r]; }
+    // l'inventaire du héros entre dans l'échange (la vérification préalable le compte aussi)
+    var cap = production(s).cap, tot = 0, besoin = 0, r, avant = [];
+    for (r = 0; r < 4; r++) { avant[r] = s.stock[r] + s.reserve[r]; tot += avant[r]; besoin += cout[r]; }
     var surplus = tot - besoin;
-    for (r = 0; r < 4; r++) s.stock[r] = cout[r];
+    for (r = 0; r < 4; r++) { s.stock[r] = cout[r]; s.reserve[r] = 0; }
     for (r = 0; r < 4 && surplus > 0; r++) { var aj = Math.min(surplus, cap[r] - s.stock[r]); s.stock[r] += aj; surplus -= aj; }
+    if (surplus > 0) s.reserve[0] += surplus; // le reste reste dans l'inventaire du héros
+    for (r = 0; r < 4; r++) s.compta.pnj[r] += s.stock[r] + s.reserve[r] - avant[r];
     s.or.pnj += 3;
-    if (s.journal) s.journal.push({ t: s.t, type: 'or', label: 'Marchand PNJ : rééquilibrer le stock', gain: '', or: 3 });
+    if (s.journal) journaliser(s, { t: s.t, type: 'or', label: 'Marchand PNJ : rééquilibrer le stock', gain: '', or: 3 });
   }
   function attendrePlace(s, champ, limite) {
     var guard = 0;
@@ -783,13 +824,14 @@ var Moteur = (function () {
       var fin = debut + duree;
       var lab = libelle(s, a, n);
       var instant = s.e.or.avecOr && s.e.or.fin === 'chaque' && gid !== 25;
-      s.lanes.push({ fin: instant ? s.t : fin, debut: debut, champ: champ, cle: cle, copie: copie, label: lab });
+      var lane = { fin: instant ? s.t : fin, debut: debut, champ: champ, cle: cle, copie: copie, label: lab };
+      s.lanes.push(lane);
       if (instant) s.or.fin += 2;
-      if (s.journal) s.journal.push({ t: s.t, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0 });
+      if (s.journal) lane.j = journaliser(s, { t: s.t, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0 });
       if (s.e.or.avecOr && s.e.or.fin === 'lot2' && s.lanes.length >= 2 && s.lanes.every(function (l) { return l.champ || l.cle !== 25; })) {
         s.lanes.forEach(function (l) { l.fin = s.t; });
         s.or.fin += 2;
-        if (s.journal) s.journal.push({ t: s.t, type: 'or', label: 'Terminer maintenant (2 chantiers)', or: 2 });
+        if (s.journal) journaliser(s, { t: s.t, type: 'or', label: 'Terminer maintenant (2 chantiers)', or: 2 });
       }
       traiterEvenements(s);
       return true;
@@ -800,13 +842,13 @@ var Moteur = (function () {
       cout = D.fete.cout;
       if (!attendreRessources(s, cout, limite)) return false;
       if (s.feteFin > s.t) avancerJusqua(s, s.feteFin);
-      payer(s, cout, 'batiments');
+      payer(s, cout, 'fetes');
       var gain = Math.min(D.fete.plafond, Math.floor(production(s).pcJour));
       s.pc += gain;
       var dF = niv(24, s.bat[24]).effets.smallPartyTime / Math.floor(s.v / 3 + 1);
       s.feteFin = s.t + dF;
       s.fetes++;
-      if (s.journal) s.journal.push({ t: s.t, type: 'fete', label: 'Petite fête n° ' + s.fetes, cout: cout, duree: dF, fin: s.feteFin, gain: '+' + gain + ' PC au lancement' });
+      if (s.journal) journaliser(s, { t: s.t, type: 'fete', label: 'Petite fête n° ' + s.fetes, cout: cout, duree: dF, fin: s.feteFin, gain: '+' + gain + ' PC au lancement' });
       encaisserTaches(s);
       return true;
     }
@@ -822,7 +864,7 @@ var Moteur = (function () {
       s.form.forEach(function (f) { if (f.bat === batForm) debutT = Math.max(debutT, f.fin); });
       var finT = debutT + u.tempsSec * fact / s.v * a.n;
       s.form.push({ fin: finT, u: a.u, n: a.n, bat: batForm });
-      if (s.journal) s.journal.push({ t: s.t, type: 'troupe', label: libelle(s, a), cout: cout, duree: finT - s.t, fin: finT, gain: '+' + Math.round(u.butin * s.butinParCapacite * a.n) + ' de butin par heure' });
+      if (s.journal) journaliser(s, { t: s.t, type: 'troupe', label: libelle(s, a), cout: cout, duree: finT - s.t, fin: finT, gain: '+' + Math.round(u.butin * s.butinParCapacite * a.n) + ' de butin par heure' });
       return true;
     }
     if (a.k === 'colon') {
@@ -833,7 +875,7 @@ var Moteur = (function () {
       if (s.colonFin >= 0) avancerJusqua(s, s.colonFin);
       payer(s, uc.cout, 'troupes');
       var dc = uc.tempsSec * niv(25, s.bat[25]).effets.trainingTimeResidence / s.v;
-      if (s.journal) s.journal.push({ t: s.t, type: 'colon', label: libelle(s, a), cout: uc.cout, duree: dc, fin: s.t + dc });
+      if (s.journal) journaliser(s, { t: s.t, type: 'colon', label: libelle(s, a), cout: uc.cout, duree: dc, fin: s.t + dc });
       s.colonFin = s.t + dc;
       return true;
     }
@@ -914,8 +956,8 @@ var Moteur = (function () {
         }
         if (!attendreRessources(s, [750, 750, 750, 750], HORIZON)) return Infinity;
         if (s.pc < besoinPC - 1e-6) continue;
-        payer(s, [750, 750, 750, 750], null);
-        if (s.journal) s.journal.push({ t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
+        payer(s, [750, 750, 750, 750], 'depart');
+        if (s.journal) journaliser(s, { t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
         return s.t;
       }
       if (action.k === 'bat' && !prerequisOk(s, action.gid)) {
@@ -1266,8 +1308,23 @@ var Moteur = (function () {
     return {
       T: T, mode: plan.mode, nom: plan.nom || '', variante: plan.v, borne: borneOpt, journal: s.journal,
       pcJour: p.pcJour, prodNet: p.net, pc: s.pc, fetes: s.fetes,
-      depense: s.depense, or: or, stockDepart: depart, alertes: alertes
+      depense: s.depense, compta: s.compta, or: or, stockDepart: depart,
+      stockFinal: [0, 1, 2, 3].map(function (r) { return s.stock[r] + s.reserve[r]; }),
+      acquis: bilanActuel(e), alertes: alertes
     };
+  }
+  // ce que le village a déjà coûté (chaque niveau de chaque champ et bâtiment, exemplaires compris, et les troupes),
+  // et les récompenses des tâches déjà atteintes (valeur de base, sans le bonus du héros de l'époque, inconnu)
+  function bilanActuel(e) {
+    var s = creerEtat(e), z = function () { return [0, 0, 0, 0]; };
+    var b = { champs: z(), batiments: z(), troupes: z(), tachesBase: 0 };
+    var ajouter = function (poste, cout, fois) { for (var r = 0; r < 4; r++) b[poste][r] += cout[r] * (fois || 1); };
+    s.champs.forEach(function (c) { for (var k = 1; k <= c.n; k++) ajouter('champs', niv(c.r, k).cout); });
+    for (var g = 5; g <= 50; g++) if (BAT[g]) for (var k = 1; k <= s.bat[g]; k++) ajouter('batiments', niv(g, k).cout);
+    s.copies.forEach(function (c) { for (var k = 1; k <= c.n; k++) ajouter('batiments', niv(c.gid, k).cout); });
+    D.troupes[s.tribu].unites.forEach(function (u, i) { if (s.troupes[i]) ajouter('troupes', u.cout, s.troupes[i]); });
+    D.taches.forEach(function (tc, i) { for (var k = 0; k < s.rang[i]; k++) b.tachesBase += tc.paliers[k].baseRessources; });
+    return b;
   }
 
   return {
@@ -1293,6 +1350,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   var TYPES = { 1: 'Bois', 2: 'Argile', 3: 'Fer', 4: 'Céréales' };
   var lu = null; // ce que le collage a donné
   var resultat = null;
+  var faits = {}; // lignes du planning cochées « Fait », par libellé
 
   // ---------- onglets ----------
   function ouvrir(id) {
@@ -1501,7 +1559,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   }
   function fmtServ(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h + 'h' + pad(m); }
   function fmtDate(ms) { var d = new Date(ms); return pad(d.getUTCDate()) + '/' + pad(d.getUTCMonth() + 1) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()); }
-  function fmt(n) { return Math.round(n).toLocaleString('fr-FR'); }
+  function fmt(n) { return (Math.round(n) || 0).toLocaleString('fr-FR'); } // || 0 : jamais « -0 »
 
   // ---------- pillage : trois façons de le saisir ----------
   function sourceButin() { return document.querySelector('input[name=butinSource]:checked').value; }
@@ -1661,15 +1719,69 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       var res = x.resume ? x.resume.prodNet.reduce(function (a, b) { return a + b; }, 0) : 0;
       return '<tr' + (i === 0 ? ' class="tache"' : '') + '><td>' + (x.nom || '') + '<br><span class="aide">' + x.fetes + ' fête' + (x.fetes > 1 ? 's' : '') + ' · ' + NM[x.mode] + '</span></td><td class="n">' + fmtServ(e.depuisOuverture + x.T) + '</td><td class="n">' + (i === 0 ? 'retenu' : '+' + fmtServ(x.T - r.scenarios[0].T)) + '</td><td class="n">' + (x.resume ? fmt(x.resume.pcJour) : '') + '</td><td class="n">' + (x.resume ? fmt(res) : '') + '</td></tr>';
     }).join('');
-    $('rPlanning').innerHTML = m.journal.map(function (j) {
+    // planning, avec population et PC par jour une fois l'action terminée, PC cumulés, case « Fait »
+    $('rPlanning').innerHTML = m.journal.map(function (j, k) {
       var cls = j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien') ? 'info' : '';
-      return '<tr class="' + cls + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td><td class="n">' + fmtServ(e.depuisOuverture + j.t) + '</td><td>' + j.label + '</td><td class="n">' + (j.cout ? j.cout.map(fmt).join(' · ') : '') + '</td><td class="n">' + (j.duree ? Moteur.fmtDuree(j.duree) : '') + '</td><td class="n">' + (j.fin ? fmtDate(base + j.fin * 1000) : '') + '</td><td>' + (j.gain || '') + (j.or ? ' · ' + j.or + ' or' : '') + '</td></tr>';
+      var fait = !!faits[j.label];
+      return '<tr class="' + cls + (fait ? ' fait' : '') + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td><td class="n">' + fmtServ(e.depuisOuverture + j.t) + '</td><td>' + j.label + '</td><td class="n">' + (j.cout ? j.cout.map(fmt).join(' · ') : '') + '</td><td class="n">' + (j.duree ? Moteur.fmtDuree(j.duree) : '') + '</td><td class="n">' + (j.fin ? fmtDate(base + j.fin * 1000) : '') + '</td><td>' + (j.gain || '') + (j.or ? ' · ' + j.or + ' or' : '') + '</td>' +
+        '<td class="n">' + (j.pop != null ? fmt(j.pop) + ' · ' + fmt(j.pcj) : '') + '</td><td class="n">' + (j.pc != null ? fmt(Math.floor(j.pc)) : '') + '</td>' +
+        '<td class="coche"><input type="checkbox" data-k="' + k + '"' + (fait ? ' checked' : '') + ' aria-label="Fait : ' + j.label.replace(/"/g, '') + '"></td></tr>';
     }).join('');
-    var d = m.depense, som = function (a) { return a[0] + a[1] + a[2] + a[3]; };
-    var tot = som(d.champs) + som(d.batiments) + som(d.troupes);
-    $('rDepenses').innerHTML = ligne('Champs', som(d.champs)) + ligne('Bâtiments et fêtes', som(d.batiments)) + ligne('Troupes et colons', som(d.troupes)) + ligne('Départ (750 de chaque)', 3000) + ligne('Total', tot + 3000, true);
-    var stock = som(m.stockDepart.stock), inv = som(m.stockDepart.reserve);
-    $('rManques').innerHTML = ligne('Reste à payer', tot + 3000) + ligne('− Stock actuel', stock) + ligne('− Inventaire du héros', inv) + ligne('Manque total', Math.max(0, tot + 3000 - stock - inv), true);
+    $('rPlanning').querySelectorAll('input[type=checkbox]').forEach(function (c) {
+      c.onchange = function () {
+        var lab = m.journal[+c.dataset.k].label;
+        if (c.checked) faits[lab] = true; else delete faits[lab];
+        c.closest('tr').classList.toggle('fait', c.checked);
+        memoriser();
+      };
+    });
+
+    if (!m.compta || !m.acquis) { // simulation enregistrée avant l'ajout du bilan : relancer le calcul pour l'obtenir
+      ['rAcquis', 'rProduit', 'rManques'].forEach(function (id) { $(id).innerHTML = '<div class="aide">Relancez le calcul pour obtenir ce bilan.</div>'; });
+      $('rBalance').innerHTML = '';
+      $('rAlertes').innerHTML = m.alertes.map(function (x) { return '<div class="msg att">' + x + '</div>'; }).join('');
+      return;
+    }
+    var d = m.depense, cpt = m.compta, som = function (a) { return a[0] + a[1] + a[2] + a[3]; };
+    var col = function (f) { return [0, 1, 2, 3].map(f); };
+    // dépensé à ce stade : ce qui existe déjà
+    var a = m.acquis, dejaTot = som(a.champs) + som(a.batiments) + som(a.troupes);
+    $('rAcquis').innerHTML = ligne('Champs', som(a.champs)) + ligne('Bâtiments', som(a.batiments)) + ligne('Troupes', som(a.troupes)) + ligne('Total', dejaTot, true);
+    // produit depuis l'ouverture (estimation) : dépensé + stock actuel − stock de départ, dont tâches et pillage connus
+    var stockAct = som(m.stockDepart.stock) + som(m.stockDepart.reserve), STOCK_INITIAL = 3000;
+    var gagne = dejaTot + stockAct - STOCK_INITIAL;
+    var taches = a.tachesBase * 4;
+    var pillage = sourceButin() === 'cumul' ? (+$('pillageCumul').value || 0) : null;
+    $('rProduit').innerHTML = ligne('Gagné depuis l’ouverture', gagne) + ligne('dont tâches déjà encaissées (au moins)', taches) +
+      (pillage !== null ? ligne('dont pillage', pillage) : '') +
+      ligne(pillage !== null ? 'Production des champs et du héros' : 'Production des champs et du héros (pillage compris)', Math.max(0, gagne - taches - (pillage || 0)), true) +
+      '<div class="aide">Hypothèses : 750 de chaque ressource au départ du village ; tâches comptées à leur valeur de base (le bonus du héros à l’époque est inconnu) ; ressources perdues quand le dépôt était plein, non comptées.</div>';
+    // manquant pour l'objectif, par ressource
+    var aPayer = col(function (r) { return d.champs[r] + d.batiments[r] + d.fetes[r] + d.troupes[r] + d.depart[r]; });
+    var dispoAct = col(function (r) { return m.stockDepart.stock[r] + m.stockDepart.reserve[r]; });
+    var manque = col(function (r) { return Math.max(0, aPayer[r] - dispoAct[r]); });
+    $('rManques').innerHTML = ['Bois', 'Argile', 'Fer', 'Céréales'].map(function (n, r) { return ligne(n, manque[r]); }).join('') + ligne('Total', som(manque), true) +
+      '<div class="aide">Soit ' + fmt(som(aPayer)) + ' à payer d’ici le départ, pour ' + fmt(som(dispoAct)) + ' disponibles aujourd’hui.</div>';
+    // balance : entrées et sorties jusqu'au départ des colons
+    var lignesB = [
+      ['Stock actuel (village et inventaire du héros)', dispoAct, ''],
+      ['+ Production (champs, héros, bonus)', cpt.prod, ''],
+      ['+ Pillage', cpt.pillage, 'sous'],
+      ['+ Récompenses des tâches', cpt.taches, ''],
+      ['+ Quêtes quotidiennes', cpt.quotidien, 'sous'],
+      ['± Marchand PNJ', cpt.pnj, 'sous'],
+      ['− Consommation (population, troupes, héros)', col(function (r) { return -(cpt.conso[r] - cpt.famine[r]); }), ''],
+      ['− Perdu (dépôt ou silo plein)', col(function (r) { return -cpt.pertes[r]; }), ''],
+      ['− Champs', col(function (r) { return -d.champs[r]; }), ''],
+      ['− Bâtiments', col(function (r) { return -d.batiments[r]; }), ''],
+      ['− Fêtes', col(function (r) { return -d.fetes[r]; }), ''],
+      ['− Troupes et colons', col(function (r) { return -d.troupes[r]; }), ''],
+      ['− Départ des colons (750 de chaque)', col(function (r) { return -d.depart[r]; }), ''],
+      ['= Stock au départ des colons', m.stockFinal, 'total']
+    ];
+    $('rBalance').innerHTML = lignesB.filter(function (l) { return l[2] !== 'sous' || som(l[1].map(Math.abs)) >= 0.5; }).map(function (l) {
+      return '<tr class="' + l[2] + '"><td>' + l[0] + '</td>' + l[1].map(function (v) { return '<td>' + fmt(v) + '</td>'; }).join('') + '<td>' + fmt(som(l[1])) + '</td></tr>';
+    }).join('');
     $('rOrDetail').innerHTML = ligne('Travian Plus', or.plus) + ligne('Bonus +25 %', or.bonus) + ligne('Terminer maintenant', or.fin) + ligne('Marchand PNJ', or.pnj) + ligne('Maître bâtisseur', or.maitre) + ligne('Total', orTot, true);
     $('rAlertes').innerHTML = m.alertes.map(function (a) { return '<div class="msg att">' + a + '</div>'; }).join('');
   }
@@ -1693,7 +1805,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         champs: champsSaisis, radios: radios,
         inventaire: Array.prototype.map.call(document.querySelectorAll('.inv'), function (x) { return x.value; }),
         bonus25: Array.prototype.map.call(document.querySelectorAll('.b25'), function (x) { return x.checked; }),
-        niveaux: niveaux, copies: copies, troupes: troupes, niveauxChamps: champs.map(function (c) { return c.n; })
+        niveaux: niveaux, copies: copies, troupes: troupes, niveauxChamps: champs.map(function (c) { return c.n; }), faits: faits
       },
       resultat: resultat
     };
@@ -1717,6 +1829,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     document.querySelectorAll('.inv').forEach(function (x, i) { x.value = (s.inventaire || [])[i] || 0; });
     document.querySelectorAll('.b25').forEach(function (x, i) { x.checked = !!(s.bonus25 || [])[i]; });
     resultat = d.resultat || null;
+    faits = s.faits || {};
     controler();
     if (resultat) afficherResultat(resultat.e, resultat.r);
   }
