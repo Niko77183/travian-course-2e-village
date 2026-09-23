@@ -1241,7 +1241,7 @@ var Moteur = (function () {
     var liste = scenarios.filter(function (x) { var k = x.nom + '|' + x.mode; if (vus[k]) return false; vus[k] = 1; return true; })
       .map(function (x) {
         var p = x.fin ? production(x.fin) : null;
-        return { nom: x.nom, mode: x.mode, fetes: x.fin ? x.fin.fetes : 0, T: x.T, resume: p ? { pcJour: p.pcJour, prodNet: p.net } : null };
+        return { nom: x.nom, mode: x.mode, fetes: x.fin ? x.fin.fetes : 0, T: x.T, v: x.v, actions: x.actions, resume: p ? { pcJour: p.pcJour, prodNet: p.net } : null };
       });
     return { meilleur: rejouer(entree, global, borneOpt), scenarios: liste, testes: testes, secondes: (Date.now() - t0) / 1000 };
   }
@@ -1272,7 +1272,7 @@ var Moteur = (function () {
 
   return {
     init: init, creerEtat: creerEtat, production: production, executer: executer, finir: finir,
-    rechercher: rechercher, cloner: cloner, population: population, pcParJour: pcParJour,
+    rechercher: rechercher, rejouer: rejouer, cloner: cloner, population: population, pcParJour: pcParJour,
     fmtDuree: fmtDuree, DISPOSITION_4446: DISPOSITION_4446, borne: borne, facteurBP: facteurBP, arrondi10: arrondi10
   };
 })();
