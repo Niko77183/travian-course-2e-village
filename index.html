@@ -1374,9 +1374,11 @@ var Moteur = (function () {
     if (!isFinite(T)) alertes.push('Même le meilleur plan dépasse 180 jours : vérifiez les saisies (production, PC cumulés, bâtiments).');
     if (s.famine) alertes.push('Le silo se vide pendant le plan : des troupes risquent de mourir de faim.');
     if (e.quotidien) alertes.push('Quêtes quotidiennes : l’ordre des récompenses est supposé commencer au jour d’ouverture du serveur. Les récompenses tirées au hasard ne sont pas comptées.');
-    alertes.push('Récompenses de tâches : supposées versées dans le village, dans la limite du dépôt et du silo.');
+    alertes.push('Récompenses des tâches et des quêtes quotidiennes : supposées encaissées au moment où elles servent, jamais dans un dépôt plein.');
     return {
       T: T, mode: plan.mode, nom: plan.nom || '', variante: plan.v, borne: borneOpt, journal: s.journal,
+      // les choix du plan : rejoués avec les mêmes saisies, ils redonnent exactement ce résultat (liens de partage courts)
+      plan: { actions: plan.actions, v: plan.v, mode: plan.mode, nom: plan.nom || '' },
       pcJour: p.pcJour, prodNet: p.net, pc: s.pc, fetes: s.fetes,
       depense: s.depense, compta: s.compta, or: or, stockDepart: depart,
       stockFinal: [0, 1, 2, 3].map(function (r) { return s.stock[r] + s.reserve[r]; }),
@@ -1965,6 +1967,72 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     }
     return d;
   }
+
+  // ---------- paquet de partage compact (version 2) ----------
+  // Au lieu du planning calculé (~300 lignes), on transmet les saisies et les choix du plan en code court ;
+  // à l'ouverture, le moteur (déterministe) rejoue ces choix et retrouve exactement le même résultat.
+  function encoderActions(liste) {
+    return liste.map(function (a) {
+      switch (a.k) {
+        case 'champ': return 'c' + a.i;
+        case 'champType': return 'r' + a.r + (a.haut ? 'h' : '');
+        case 'bat': return 'b' + (a.gid === 'mur' ? 'm' : a.gid) + (a.c >= 0 ? '.' + a.c : '');
+        case 'copie': return 'n' + a.gid;
+        case 'fete': return 'f';
+        case 'troupe': return 't' + a.u + 'x' + a.n;
+        case 'colon': return 'o';
+        default: return '';
+      }
+    }).join(',');
+  }
+  function decoderActions(txt) {
+    if (!txt) return [];
+    return txt.split(',').map(function (c) {
+      var m;
+      if ((m = c.match(/^c(\d+)$/))) return { k: 'champ', i: +m[1] };
+      if ((m = c.match(/^r(\d)(h?)$/))) return m[2] ? { k: 'champType', r: +m[1], haut: true } : { k: 'champType', r: +m[1] };
+      if ((m = c.match(/^b(m|\d+)(?:\.(\d+))?$/))) { var a = { k: 'bat', gid: m[1] === 'm' ? 'mur' : +m[1] }; if (m[2] !== undefined) a.c = +m[2]; return a; }
+      if ((m = c.match(/^n(\d+)$/))) return { k: 'copie', gid: +m[1] };
+      if (c === 'f') return { k: 'fete' };
+      if ((m = c.match(/^t(\d+)x(\d+)$/))) return { k: 'troupe', u: +m[1], n: +m[2] };
+      if (c === 'o') return { k: 'colon' };
+      return null;
+    }).filter(Boolean);
+  }
+  // le collage réduit aux lignes que la lecture utilise
+  function collageMinimal(l) {
+    if (!l || !l.stock) return $('collage').value;
+    var h = l.heure || [0, 0, 0];
+    var lignes = [String(l.or || 0), '0', String(l.capDepot), String(l.stock[0]), String(l.stock[1]), String(l.stock[2]), String(l.capSilo), String(l.stock[3]), String(l.cerDispo || 0),
+      'Héros', 'Heure du serveur: ' + pad(h[0]) + ':' + pad(h[1]) + ':' + pad(h[2]), (l.champs || []).join('')];
+    ['Bois', 'Argile', 'Fer', 'Céréales'].forEach(function (n, r) { if (l.prod && l.prod[r] !== null) lignes.push(n + ': ' + l.prod[r]); });
+    if (l.bonus) lignes.push('+25%');
+    if (l.pop !== null && l.pop !== undefined) lignes.push('Population: ' + l.pop);
+    return lignes.join('\n');
+  }
+  function paquetPartage() {
+    var s = capturer().saisie;
+    s.champs.collage = collageMinimal(lu);
+    var p = { v: 2, s: s };
+    var m = resultat && resultat.r && resultat.r.meilleur;
+    if (m && m.plan) {
+      var r = resultat.r;
+      p.p = { a: encoderActions(m.plan.actions), v: m.plan.v, m: m.plan.mode, n: m.plan.nom, b: Math.round(m.borne) };
+      p.sc = (r.scenarios || []).map(function (x) { return [x.nom, x.mode, x.fetes, Math.round(x.T), x.resume ? Math.round(x.resume.pcJour) : null, x.resume ? x.resume.prodNet.map(Math.round) : null]; });
+      p.t = r.testes; p.d = Math.round(r.secondes * 10) / 10;
+    }
+    return p;
+  }
+  function ouvrirPaquet(d) {
+    if (!d || d.v !== 2) { restaurer(d); return; } // ancien format : simulation complète
+    restaurer({ application: 'course-2e-village', saisie: d.s, resultat: null });
+    if (!d.p) return;
+    var e = entree();
+    var m = Moteur.rejouer(e, { actions: decoderActions(d.p.a), v: d.p.v, mode: d.p.m, nom: d.p.n }, d.p.b);
+    var sc = (d.sc || []).map(function (x) { return { nom: x[0], mode: x[1], fetes: x[2], T: x[3], resume: x[4] !== null ? { pcJour: x[4], prodNet: x[5] } : null }; });
+    resultat = { e: e, r: { meilleur: m, scenarios: sc, testes: d.t || 0, secondes: d.d || 0 } };
+    afficherResultat(e, resultat.r);
+  }
   function ouvrirDialogue(id) { var d = $(id); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
   document.querySelectorAll('[data-fermer]').forEach(function (b) { b.onclick = function () { b.closest('dialog').close(); }; });
 
@@ -2023,7 +2091,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   $('partager').onclick = function () {
     $('lienPartage').value = ''; $('partageEtat').textContent = 'Préparation du lien…'; ouvrirDialogue('dlgPartage');
     var adresse = location.origin + location.pathname;
-    compresser(JSON.stringify(allege())).then(function (code) {
+    compresser(JSON.stringify(paquetPartage())).then(function (code) {
       var id = idAleatoire();
       return fetch(BASE_PARTAGE + id + '.json', { method: 'PUT', body: JSON.stringify(code) })
         .then(function (rep) { if (!rep.ok) throw new Error('refus ' + rep.status); return adresse + '?p=' + id; })
@@ -2032,7 +2100,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     }).then(function (x) {
       $('lienPartage').value = x.lien;
       $('partageEtat').textContent = x.court ? 'Lien court, valable sur tous les appareils.'
-        : 'Lien autonome : il contient toute la simulation (' + Math.round(x.lien.length / 1024) + ' Ko). Il fonctionne partout, mais il est long pour certaines messageries.';
+        : 'Lien autonome de ' + x.lien.length.toLocaleString('fr-FR') + ' caractères : il contient les saisies et les choix du plan, que l’application rejoue à l’ouverture. Il fonctionne partout, sans serveur.';
     });
   };
   $('copierLien').onclick = function () {
@@ -2046,7 +2114,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (!p && !h) return false;
     var charge = p ? fetch(BASE_PARTAGE + encodeURIComponent(p) + '.json').then(function (r) { if (!r.ok) throw new Error('lien introuvable'); return r.json(); }) : Promise.resolve(h);
     charge.then(function (code) { if (!code) throw new Error('lien introuvable ou expiré'); return decompresser(code); })
-      .then(function (t) { restaurer(JSON.parse(t)); message('Simulation partagée ouverte. Pour la garder : « Mes simulations » → « Enregistrer ici ».', 'ok'); if (resultat) ouvrir('resultat'); })
+      .then(function (t) { ouvrirPaquet(JSON.parse(t)); message('Simulation partagée ouverte. Pour la garder : « Mes simulations » → « Enregistrer ici ».', 'ok'); if (resultat) ouvrir('resultat'); })
       .catch(function (err) { message('Impossible d’ouvrir la simulation partagée : ' + err.message + '.', 'err'); });
     return true;
   }
