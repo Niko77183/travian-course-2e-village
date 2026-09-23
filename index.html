@@ -388,7 +388,7 @@ tr.auto td{color:var(--doux);font-style:italic}
       </div>
       <label style="display:flex;gap:10px;align-items:center;font-size:14px">Héros pendant la stratégie <select id="sHeros"><option value="production">en production</option><option value="combat">en combat (pille)</option></select></label>
       <label style="display:flex;gap:10px;align-items:center;font-size:14px"><input type="checkbox" id="sAuto" checked> Construire d’abord les prérequis manquants, et agrandir le dépôt ou le silo quand un coût les dépasse (lignes ajoutées en italique)</label>
-      <div class="defile"><table class="strat"><thead><tr><th>#</th><th>Action</th><th>Au départ</th><th>Niveau visé ou nombre</th><th>Lancement</th><th>Fin</th><th>Coût total</th><th>Faisable ?</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
+      <div class="defile"><table class="strat"><thead><tr><th>#</th><th>Action</th><th>Au départ</th><th>Niveau visé ou nombre</th><th>Lancement</th><th>Fin</th><th>Coût total</th><th title="Valeurs du village une fois terminés tous les chantiers lancés jusqu’à cette ligne">Population · PC/jour<br><span class="aide">chantiers lancés finis</span></th><th>PC cumulés</th><th>Faisable ?</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
       <div id="sVide" class="aide">Aucune ligne pour l’instant : ajoutez-en, ou partez du plan retenu par le moteur (onglet 4) pour le retoucher.</div>
     </section>
     <div id="sResultat" style="display:none;flex-direction:column;gap:24px">
@@ -670,7 +670,7 @@ var Moteur = (function () {
     if (!s.proj) s.proj = { pop: p.pop, pcj: p.pcJour };
     if (gain) { s.proj.pop += gain.pop; s.proj.pcj += gain.pcj; }
     j.pc = s.pc; j.pop = s.proj.pop; j.pcj = s.proj.pcj;
-    j.stock = s.stock.map(Math.round); j.cap = p.cap.slice(); // stock juste après l'action (paiement déduit)
+    j.stock = s.stock.map(Math.round); j.reserve = s.reserve.map(Math.round); j.cap = p.cap.slice(); // stock et inventaire juste après l'action (paiement déduit)
     j.pertes = s.compta.pertes.map(Math.round); // pertes cumulées depuis le début du plan
     s.journal.push(j);
     return j;
@@ -1541,7 +1541,16 @@ var Moteur = (function () {
     return 'ressources pas réunies dans les 180 jours';
   }
   // joue une action élémentaire, en construisant d'abord ce qui manque si auto ; renvoie null ou la raison de l'échec
-  function jouerAction(s, a, auto, marquer) {
+  // ressource qui fera attendre cette action, et combien de temps (estimation à la production actuelle)
+  function goulot(s, cout) {
+    var p = production(s), pire = -1, tmax = 0;
+    for (var r = 0; r < 4; r++) if (dispo(s, r) < cout[r] && p.net[r] > 0) {
+      var tr = (cout[r] - dispo(s, r)) / p.net[r] * H;
+      if (tr > tmax) { tmax = tr; pire = r; }
+    }
+    return { r: pire, t: tmax };
+  }
+  function jouerAction(s, a, auto, marquer, attentes) {
     for (var garde = 0; garde < 200; garde++) {
       if (s.t > HORIZON) return 'au-delà de 180 jours';
       var raison = interdit(s, a, auto);
@@ -1569,7 +1578,8 @@ var Moteur = (function () {
         marquer(k0);
         continue;
       }
-      if (executer(s, a, HORIZON)) return null;
+      var go = goulot(s, coutAction(s, a));
+      if (executer(s, a, HORIZON)) { if (attentes && go.r >= 0) attentes[go.r] += go.t; return null; }
       return raisonAttente(s, coutAction(s, a));
     }
     return 'trop d’étapes';
@@ -1583,7 +1593,8 @@ var Moteur = (function () {
     var marquer = function (k) { for (var q = k; q < s.journal.length; q++) if (s.journal[q].type === 'champ' || s.journal[q].type === 'batiment') s.journal[q].auto = true; };
     lignes.forEach(function (l, idx) {
       var k0 = s.journal.length, t0 = s.t, raison = null, faits = 0;
-      var etape = function (a) { var r = jouerAction(s, a, opt.auto !== false, marquer); if (!r) faits++; return r; };
+      var attentes = [0, 0, 0, 0];
+      var etape = function (a) { var r = jouerAction(s, a, opt.auto !== false, marquer, attentes); if (!r) faits++; return r; };
       if (l.t === 'bat') {
         var gid = +l.gid, c = l.c === 'nouveau' ? 'nouveau' : +l.c;
         if (!BAT[gid]) raison = 'bâtiment inconnu';
@@ -1631,16 +1642,20 @@ var Moteur = (function () {
         if (!raison) faits++;
       } else raison = 'ligne inconnue';
       // bornes de la ligne : lancement de sa première action, fin de la dernière
-      var debut = null, fin = null, cout = [0, 0, 0, 0];
+      var debut = null, fin = null, cout = [0, 0, 0, 0], etat = null;
       for (var j = k0; j < s.journal.length; j++) {
         var x = s.journal[j];
         if (!x.cout && x.type !== 'attente') continue;
-        x.ligne = idx;
+        x.ligne = idx; etat = x;
         if (debut === null) debut = x.t;
         fin = Math.max(fin === null ? 0 : fin, x.fin !== undefined ? x.fin : x.t);
         if (x.cout) for (var r = 0; r < 4; r++) cout[r] += x.cout[r];
       }
-      res.push({ ok: !raison, raison: raison, faits: faits, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null });
+      // population et PC par jour une fois finis les chantiers lancés jusqu'ici, PC cumulés au dernier lancement de la ligne
+      // (mêmes conventions que le planning du moteur automatique)
+      res.push({ ok: !raison, raison: raison, faits: faits, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null,
+        pop: etat ? etat.pop : null, pcj: etat ? etat.pcj : null, pc: etat ? etat.pc : null, stock: etat ? etat.stock : null,
+        attentes: attentes, goulot: Math.max.apply(null, attentes) > 60 ? NOMS_RES[attentes.indexOf(Math.max.apply(null, attentes))] : null });
     });
     // tout ce qui est lancé se termine
     var tFin = s.t;
@@ -2264,7 +2279,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     $('sLignes').innerHTML = strat.map(function (l, k) {
       var champ = l.t === 'depart' ? '' : '<input type="number" min="1" max="' + maxLigne(l) + '" value="' + (l.t === 'champ' || l.t === 'bat' ? l.niveau : l.n) + '" data-k="' + (l.t === 'champ' || l.t === 'bat' ? 'niveau' : 'n') + '" aria-label="' + (l.t === 'champ' || l.t === 'bat' ? 'Niveau visé' : 'Nombre') + ', ligne ' + (k + 1) + '">';
       return '<tr data-l="' + k + '"><td class="n">' + (k + 1) + '</td><td>' + optionsLigne(l, k) + '</td><td class="aide">' + auDepart(l, k) + '</td><td>' + champ + '</td>' +
-        '<td class="n" data-c="debut"></td><td class="n" data-c="fin"></td><td class="n" data-c="cout"></td><td data-c="etat"></td>' +
+        '<td class="n" data-c="debut"></td><td class="n" data-c="fin"></td><td class="n" data-c="cout"></td><td class="n" data-c="pop"></td><td class="n" data-c="pc"></td><td data-c="etat"></td>' +
         '<td><div class="ordre"><button type="button" data-act="haut" aria-label="Monter la ligne ' + (k + 1) + '">▲</button><button type="button" data-act="bas" aria-label="Descendre la ligne ' + (k + 1) + '">▼</button><button type="button" class="retirer" data-act="suppr" aria-label="Supprimer la ligne ' + (k + 1) + '">×</button></div></td></tr>';
     }).join('');
   }
@@ -2288,7 +2303,9 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       tr.querySelector('[data-c=debut]').innerHTML = quand(x.debut);
       tr.querySelector('[data-c=fin]').innerHTML = quand(x.fin);
       tr.querySelector('[data-c=cout]').textContent = som(x.cout) ? fmt(som(x.cout)) : '';
-      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.attente > 3600 ? '<br><span class="aide">attente ' + fmtServ(x.attente) + '</span>' : '')
+      tr.querySelector('[data-c=pop]').textContent = x.pop != null ? fmt(x.pop) + ' · ' + fmt(x.pcj) : '';
+      tr.querySelector('[data-c=pc]').textContent = x.pc != null ? fmt(Math.floor(x.pc)) : '';
+      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.attente > 3600 ? '<br><span class="aide">attente ' + fmtServ(x.attente) + (x.goulot ? ', surtout ' + (x.goulot === 'argile' ? 'l’argile' : x.goulot === 'céréales' ? 'les céréales' : 'le ' + x.goulot) : '') + '</span>' : '')
         : '<span class="etat-ko">Non</span><br><span class="aide">' + esc(x.raison) + '</span>';
     });
     $('sResultat').style.display = 'flex';
