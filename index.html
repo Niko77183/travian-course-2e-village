@@ -370,6 +370,8 @@ var Moteur = (function () {
 
   // horizon large : un plan lent n'est pas « impossible », il est classé (un village neuf ne produit que quelques PC par jour)
   var H = 3600, J = 86400, HORIZON = 180 * J;
+  // emplacements du centre du village : 19 à 38 (Bâtiment principal compris) ; 39 = place de rassemblement, 40 = mur (relevé en jeu)
+  var EMPLACEMENTS = 20;
   var MURS = { romains: 31, germains: 32, gaulois: 33, egyptiens: 42, huns: 43, spartiates: 47, vikings: 50 };
   // Bâtiments jamais proposés : décisions de l'utilisateur (Résidence seule, pas de grande fête) ou sans intérêt avant la fondation
   var EXCLUS = { 26: 1, 27: 1, 28: 1, 29: 1, 30: 1, 35: 1, 38: 1, 39: 1, 40: 1, 41: 1, 44: 1, 45: 1, 46: 1, 48: 1, 49: 1 };
@@ -437,6 +439,8 @@ var Moteur = (function () {
     var cap = 0;
     unites.forEach(function (u, i) { if (estPillard(u)) cap += s.troupes[i] * u.butin; });
     s.butinParCapacite = cap > 0 ? (e.butinTroupes || 0) / cap : 0;
+    // capacité inconnue (butin des Vikings non publié) ou aucune troupe de pillage déclarée : le butin saisi compte tel quel
+    s.butinFixe = cap > 0 ? 0 : (e.butinTroupes || 0);
     // remise à zéro quotidienne : à l'heure d'ouverture du serveur
     var t0 = e.depuisOuverture || 0;
     s.prochainReset = J - (t0 % J);
@@ -463,7 +467,7 @@ var Moteur = (function () {
       form: s.form.map(function (f) { return { fin: f.fin, u: f.u, n: f.n, bat: f.bat }; }),
       colonsFaits: s.colonsFaits, colonFin: s.colonFin,
       heros: { niv: s.heros.niv, xp: s.heros.xp, pts: s.heros.pts, type: s.heros.type, mode: s.heros.mode },
-      troupes: s.troupes.slice(), butinHeros: s.butinHeros, butinParCapacite: s.butinParCapacite,
+      troupes: s.troupes.slice(), butinHeros: s.butinHeros, butinParCapacite: s.butinParCapacite, butinFixe: s.butinFixe,
       bonusTemp: s.bonusTemp.slice(), plusTempFin: s.plusTempFin,
       rang: new Int8Array(s.rang), prochainReset: s.prochainReset,
       or: { plus: s.or.plus, bonus: s.or.bonus, fin: s.or.fin, pnj: s.or.pnj, maitre: s.or.maitre },
@@ -538,6 +542,7 @@ var Moteur = (function () {
       if (estPillard(unites[i])) pillage += s.troupes[i] * unites[i].butin * s.butinParCapacite;
     }
     conso += s.colonsFaits; // un colon consomme 1 céréale
+    pillage += s.butinFixe;
     if (s.heros.mode === 'combat') pillage += s.butinHeros;
     var net = [0, 0, 0, 0];
     for (r = 0; r < 4; r++) net[r] = champs[r] + heros[r] + bonus[r] + pillage / 4;
@@ -873,7 +878,7 @@ var Moteur = (function () {
     var cout, n, duree, champ, cle, gid;
     if (a.k === 'copie') {
       // nouvel exemplaire : il occupe un emplacement, puis se construit comme un bâtiment
-      if (!copieAutorisee(s, a.gid) || emplacementsOccupes(s) >= 22) return false;
+      if (!copieAutorisee(s, a.gid) || emplacementsOccupes(s) >= EMPLACEMENTS) return false;
       s.copies.push({ gid: a.gid, n: 0 });
       if (executer(s, { k: 'bat', gid: a.gid, c: s.copies.length - 1 }, limite)) return true;
       s.copies.pop();
@@ -887,7 +892,7 @@ var Moteur = (function () {
       if (n > (champ ? CHAMP_MAX : BAT[gid].niveauMax)) return false;
       if (!champ) {
         if (!prerequisOk(s, gid)) return false;
-        if (copie < 0 && s.bat[gid] === 0 && n === 1 && gid !== 16 && gid !== MURS[s.tribu] && emplacementsOccupes(s) >= 22) return false;
+        if (copie < 0 && s.bat[gid] === 0 && n === 1 && gid !== 16 && gid !== MURS[s.tribu] && emplacementsOccupes(s) >= EMPLACEMENTS) return false;
       }
       var nv = niv(gid, n);
       cout = nv.cout;
@@ -1075,7 +1080,7 @@ var Moteur = (function () {
       if (!BAT[g] || EXCLUS[g] || vus[g]) continue;
       if (niveauVise(s, false, g) > BAT[g].niveauMax) continue;
       if (!prerequisOk(s, g)) continue;
-      if (s.bat[g] === 0 && enFile(s, g) === 0 && g !== 16 && g !== MURS[s.tribu] && occ >= 22) continue;
+      if (s.bat[g] === 0 && enFile(s, g) === 0 && g !== 16 && g !== MURS[s.tribu] && occ >= EMPLACEMENTS) continue;
       out.push({ k: 'bat', gid: g });
     }
     // exemplaires supplémentaires : monter le moins avancé de chaque bâtiment, ou en construire un nouveau
@@ -1086,7 +1091,7 @@ var Moteur = (function () {
       if (plusBas[c.gid] === undefined || nj < niveauVise(s, false, c.gid, plusBas[c.gid])) plusBas[c.gid] = j;
     });
     Object.keys(plusBas).forEach(function (g) { out.push({ k: 'bat', gid: +g, c: plusBas[g] }); });
-    if (!sansCopies && occ < 22) Object.keys(MULTIPLES).forEach(function (g) { if (copieAutorisee(s, +g)) out.push({ k: 'copie', gid: +g }); });
+    if (!sansCopies && occ < EMPLACEMENTS) Object.keys(MULTIPLES).forEach(function (g) { if (copieAutorisee(s, +g)) out.push({ k: 'copie', gid: +g }); });
     if (s.bat[24] >= 1) out.push({ k: 'fete' });
     var unites = D.troupes[s.tribu].unites;
     for (var u = 0; u < unites.length; u++) if (estPillard(unites[u]) && s.e.troupes && s.e.troupes[u] > 0 && s.butinParCapacite > 0) out.push({ k: 'troupe', u: u, n: 5 });
@@ -1155,7 +1160,7 @@ var Moteur = (function () {
     if (et.copies !== undefined) {
       var nb = 0;
       s.copies.forEach(function (c) { if (c.gid === et.copies) nb++; });
-      if (et.nombre && nb < et.nombre) return copieAutorisee(s, et.copies) && emplacementsOccupes(s) < 22 ? { k: 'copie', gid: et.copies } : null;
+      if (et.nombre && nb < et.nombre) return copieAutorisee(s, et.copies) && emplacementsOccupes(s) < EMPLACEMENTS ? { k: 'copie', gid: et.copies } : null;
       s.copies.forEach(function (c, j) {
         if (c.gid !== et.copies) return;
         var nj = niveauVise(s, false, c.gid, j) - 1;
@@ -1419,7 +1424,7 @@ var Moteur = (function () {
       debut: seg.length ? seg[0].taux : p.pillage, herosDebut: seg.length ? seg[0].heros : hFin,
       fin: p.pillage, herosFin: hFin, duree: fin,
       h12: cumul(Math.min(12 * H, fin)), h24: cumul(Math.min(24 * H, fin)),
-      total: cumul(fin), totalHeros: cumul(fin, 'heros'), paliers: paliers
+      total: cumul(fin), totalHeros: cumul(fin, 'heros'), paliers: paliers, fixe: s.butinFixe
     };
   }
   // ce que le village a déjà coûté (chaque niveau de chaque champ et bâtiment, exemplaires compris, et les troupes),
@@ -1729,8 +1734,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       var msg = 'un 2e exemplaire de ' + b.nom + ' exige le premier au niveau ' + b.niveauMax;
       if (MULTIPLES[c.gid] === 'aumax' && (niveaux[c.gid] || 0) < b.niveauMax && erreurs.indexOf(msg) < 0) erreurs.push(msg);
     });
-    if (occ > 22) erreurs.push('plus de bâtiments que d’emplacements (' + occ + ' pour 22)');
-    h += erreurs.length ? '<div class="msg err">' + erreurs.join(' · ') + '</div>' : '<div class="msg ok">Prérequis respectés · ' + occ + ' emplacements occupés sur 22</div>';
+    if (occ > 20) erreurs.push('plus de bâtiments que d’emplacements (' + occ + ' pour 20, hors place de rassemblement et mur)');
+    h += erreurs.length ? '<div class="msg err">' + erreurs.join(' · ') + '</div>' : '<div class="msg ok">Prérequis respectés · ' + occ + ' emplacements occupés sur 20 (hors place de rassemblement et mur)' + (occ >= 20 ? ' : village plein, plus aucun nouveau bâtiment possible' : '') + '</div>';
     // population
     var e = entree();
     var s = null;
@@ -1899,9 +1904,9 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   function afficherPillage(e, m, base) {
     var pl = m.pillage;
     if (!pl) { $('rPillage').innerHTML = '<div class="aide">Relancez le calcul pour obtenir le pillage attendu.</div>'; return; }
-    var sansTroupes = e.butinTroupes > 0 && pl.debut - pl.herosDebut < 0.5
-      ? '<div class="msg att">Butin des troupes saisi (' + fmt(e.butinTroupes) + '/h), mais aucune troupe de pillage n’est déclarée à l’onglet 2 : ce butin n’est pas compté.</div>' : '';
-    if (pl.total < 0.5 && pl.fin < 0.5) { $('rPillage').innerHTML = sansTroupes + '<div class="aide">Aucun pillage dans ce plan' + (sansTroupes ? '.' : ' : pas de butin saisi à l’onglet 2 (ou le héros reste en production, ce qui rapporte plus).') + '</div>'; return; }
+    var sansTroupes = pl.fixe > 0
+      ? '<div class="msg att">Butin des troupes (' + fmt(pl.fixe) + '/h) compté tel quel pendant tout le plan : ' + (e.tribu === 'vikings' ? 'la capacité de transport des troupes vikings n’est pas publiée' : 'aucune troupe de pillage n’est déclarée à l’onglet 2') + ', il ne peut donc pas augmenter avec les troupes que le plan forme.</div>' : '';
+    if (pl.total < 0.5 && pl.fin < 0.5) { $('rPillage').innerHTML = sansTroupes + '<div class="aide">Aucun pillage dans ce plan : pas de butin saisi à l’onglet 2 (ou le héros reste en production, ce qui rapporte plus).</div>'; return; }
     var herosTxt = function (h) { return h >= 0.5 ? '<div class="aide">dont héros ' + fmt(h) + '</div>' : ''; };
     var court = pl.duree < 24 * 3600;
     var h = sansTroupes + '<div class="trois">' +
