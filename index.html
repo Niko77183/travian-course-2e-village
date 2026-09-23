@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="version" content="1790194843230">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -131,6 +132,10 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+.retirer.petit{width:26px;height:26px;font-size:14px;border-radius:7px}
+.retraits{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.puce{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 11px;border-radius:999px;background:var(--rougef);color:var(--rouge);font-size:13px;font-weight:500}
+.puce button{border:0;background:transparent;color:var(--rouge);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
 .deja{display:inline-flex;gap:6px;align-items:center;margin-left:10px;font-size:12px;color:var(--doux);font-style:normal;white-space:nowrap;cursor:pointer}.deja input{width:14px;height:14px}
 tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-decoration:line-through}
 .options-strat{display:flex;gap:10px 28px;flex-wrap:wrap;align-items:center;font-size:14px}
@@ -182,6 +187,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
     <div class="aide">La personne qui ouvre ce lien voit vos saisies et votre résultat, et peut relancer le calcul. Rien n’est modifié chez vous.</div>
   </div>
 </dialog>
+<div class="bandeau" id="bandeauVersion" hidden><span>Une nouvelle version de l’application est en ligne.</span><button type="button" class="bouton" id="rechargerVersion" style="padding:8px 14px;font-size:14px">Recharger</button></div>
 <div class="bandeau" id="bandeauReprise" hidden>
   <span id="texteReprise"></span>
   <span style="display:flex;gap:8px">
@@ -405,8 +411,9 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
     </section>
     <section class="carte">
       <h2>Planning</h2>
-      <div class="aide">Population et PC par jour : une fois terminés les chantiers lancés jusqu’à la ligne. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation.</div>
-      <div class="defile"><table><thead><tr><th class="n" title="Heure de lancement">Date</th><th>Action</th><th class="n">Coût</th><th class="n" title="Heure où les ressources de l’action sont disponibles">Ressources réunies</th><th class="n" title="Temps avant d’avoir les ressources, depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th><th class="c">Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
+      <div class="aide">Population et PC par jour : une fois terminés les chantiers lancés jusqu’à la ligne. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation. « × » retire une action que vous ne voulez pas faire : le plan se met à jour sans elle.</div>
+      <div id="rRetraits"></div>
+      <div class="defile"><table><thead><tr><th class="n" title="Heure de lancement">Date</th><th>Action</th><th class="n">Coût</th><th class="n" title="Heure où les ressources de l’action sont disponibles">Ressources réunies</th><th class="n" title="Temps avant d’avoir les ressources, depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th><th class="c">Fait</th><th class="c" title="Retirer une action du plan">Retirer</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
     </section>
     <section class="carte" style="max-width:520px"><h2>Or, par fonction</h2><div id="rOrDetail"></div></section>
     <div id="rAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -982,6 +989,8 @@ var Moteur = (function () {
   var NOMS_CHAMP = { 1: 'Bûcheron', 2: 'Carrière d’argile', 3: 'Mine de fer', 4: 'Ferme' };
 
   // exécute l'action au plus tôt ; renvoie false si elle est impossible avant la limite
+  // actions que le joueur a retirées du plan (onglet Résultat) : le moteur ne les propose plus
+  function exclu(s, cle) { return !!(s.e.exclusions && s.e.exclusions.length && s.e.exclusions.indexOf(cle) >= 0); }
   function executer(s, a, limite) {
     limite = limite || HORIZON;
     var cout, n, duree, champ, cle, gid;
@@ -999,6 +1008,8 @@ var Moteur = (function () {
       if (copie >= 0 && !s.copies[copie]) return false;
       n = niveauVise(s, champ, cle, copie);
       if (n > (champ ? (s.champMax || CHAMP_MAX) : BAT[gid].niveauMax)) return false;
+      var ex = champ ? 'c' + a.i + ':' + n : 'b' + gid + (copie >= 0 ? '.' + copie : '') + ':' + n;
+      if (exclu(s, ex)) return false; // action retirée par le joueur
       if (!champ) {
         if (!prerequisOk(s, gid)) return false;
         if (copie < 0 && s.bat[gid] === 0 && n === 1 && gid !== 16 && gid !== MURS[s.tribu] && emplacementsOccupes(s) >= EMPLACEMENTS) return false;
@@ -1028,7 +1039,7 @@ var Moteur = (function () {
         var p0 = production(s), pop0 = p0.pop, pcj0 = p0.pcJour;
         monter(1); var p1 = production(s), gain = { pop: p1.pop - pop0, pcj: p1.pcJour - pcj0 }; monter(-1);
         journaliser(s, { t: s.t, res: s.tRessources, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0,
-          cible: champ ? { i: cle } : { gid: gid, c: copie }, niveau: n }, gain);
+          cible: champ ? { i: cle } : { gid: gid, c: copie }, niveau: n, ex: ex }, gain);
       }
       if (s.e.or.avecOr && s.e.or.fin === 'lot2' && s.lanes.length >= 2 && s.lanes.every(function (l) { return l.champ || l.cle !== 25; })) {
         s.lanes.forEach(function (l) { l.fin = s.t; });
@@ -1038,6 +1049,7 @@ var Moteur = (function () {
       traiterEvenements(s);
       return true;
     }
+    if (a.k === 'fete' && exclu(s, 'f' + (s.fetes + 1))) return false;
     if (a.k === 'fete') {
       if (s.bat[24] < 1) return false;
       cout = D.fete.cout;
@@ -1052,11 +1064,12 @@ var Moteur = (function () {
       var dF = niv(24, s.bat[24]).effets.smallPartyTime / Math.floor(s.v / 3 + 1);
       s.feteFin = s.t + dF;
       s.fetes++;
-      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'fete', label: 'Petite fête n° ' + s.fetes, cout: cout, duree: dF, fin: s.feteFin, gain: '+' + gain + ' PC au lancement' });
+      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'fete', label: 'Petite fête n° ' + s.fetes, ex: 'f' + s.fetes, cout: cout, duree: dF, fin: s.feteFin, gain: '+' + gain + ' PC au lancement' });
       encaisserTaches(s);
       return true;
     }
     if (a.k === 'troupe') {
+      if (!a.manuel && exclu(s, 't' + a.u)) return false;
       var u = D.troupes[s.tribu].unites[a.u];
       var siege = SIEGE.test(u.nomEn);
       var batForm = siege ? 21 : u.infanterie ? 19 : 20, cleT = siege ? 'trainingTimeWorkshop' : u.infanterie ? 'trainingTimeBarracks' : 'trainingTimeStable';
@@ -1072,7 +1085,7 @@ var Moteur = (function () {
       s.form.forEach(function (f) { if (f.bat === batForm) debutT = Math.max(debutT, f.fin); });
       var finT = debutT + u.tempsSec * fact / s.v * a.n;
       s.form.push({ fin: finT, u: a.u, n: a.n, bat: batForm });
-      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'troupe', label: libelle(s, a), u: a.u, n: a.n, cout: cout, duree: finT - s.t, fin: finT, gain: estPillard(u) && s.butinParCapacite > 0 ? '+' + Math.round(u.butin * s.butinParCapacite * a.n) + ' de butin par heure' : '' });
+      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'troupe', label: libelle(s, a), u: a.u, n: a.n, ex: a.manuel ? undefined : 't' + a.u, cout: cout, duree: finT - s.t, fin: finT, gain: estPillard(u) && s.butinParCapacite > 0 ? '+' + Math.round(u.butin * s.butinParCapacite * a.n) + ' de butin par heure' : '' });
       return true;
     }
     if (a.k === 'colon') {
@@ -1146,7 +1159,7 @@ var Moteur = (function () {
       // PC encore manquants au départ le plus tôt possible : il faudra des fêtes
       var pcCourts = !pcOk && s.pc + pj * Math.max(0, borne(s) - s.t) / J < besoinPC;
       var fete = null, hdv = null, res = null, colon = null;
-      if (pcCourts && s.bat[24] >= 1 && s.feteFin <= s.t) fete = pourCout(s, D.fete.cout) || { k: 'fete' };
+      if (pcCourts && s.bat[24] >= 1 && s.feteFin <= s.t && !exclu(s, 'f' + (s.fetes + 1))) fete = pourCout(s, D.fete.cout) || { k: 'fete' };
       if (pcCourts && s.bat[24] + enFile(s, 24) < 1) hdv = versBatiment(s, 24, 1);
       if (s.bat[25] + enFile(s, 25) < 10) res = versBatiment(s, 25, 10);
       if (s.bat[25] >= 10 && s.colonsFaits + (s.colonFin >= 0 ? 1 : 0) < 3) colon = pourCout(s, D.troupes[s.tribu].unites[9].cout) || { k: 'colon' };
@@ -1847,13 +1860,15 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   var lu = null; // ce que le collage a donné
   var resultat = null;
   var faits = {}; // lignes du planning cochées « Fait », par libellé
+  var retraits = []; // actions retirées du plan du moteur : {cle, label}
   var touchees = []; // paliers de tâches déjà touchés dans le jeu (« nom|palier ») : leur récompense n'est pas comptée
 
   // ---------- onglets ----------
   function ouvrir(id) {
+    var deja = $(id) && $(id).classList.contains('actif');
     document.querySelectorAll('.onglet').forEach(function (o) { o.classList.toggle('actif', o.id === id); });
     document.querySelectorAll('nav button').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.onglet === id ? 'true' : 'false'); });
-    window.scrollTo(0, 0);
+    if (!deja) window.scrollTo(0, 0);
     if (id === 'strategie') { dessinerStrat(); calculerStrat(); } // les saisies des onglets 1 à 3 ont pu changer
   }
   document.querySelectorAll('nav button').forEach(function (b) { b.onclick = function () { ouvrir(b.dataset.onglet); }; });
@@ -2095,7 +2110,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         mode: document.querySelector('input[name=mode]:checked').value, auto: $('hAuto').checked },
       troupes: troupes.slice(), butinHeros: bh, butinTroupes: bt,
       pc: +$('pc').value || 0, feteFinDans: ff !== null && ic !== null && ff > ic ? (ff - ic) / 1000 : null,
-      quotidien: +$('quotidien').value, tachesTouchees: touchees.slice(), formerTroupes: $('oTroupes').checked,
+      quotidien: +$('quotidien').value, tachesTouchees: touchees.slice(), formerTroupes: $('oTroupes').checked, exclusions: retraits.map(function (x) { return x.cle; }),
       or: { avecOr: document.querySelector('input[name=or]:checked').value === '1', plus: $('oPlus').checked, fin: $('oFin').value, pnj: $('oPnj').checked, maitre: $('oMaitre').checked, video: $('oVideo').checked },
     };
   }
@@ -2218,7 +2233,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       return '<tr' + (i === 0 ? ' class="tache"' : '') + '><td>' + (x.nom || '') + '<br><span class="aide">' + x.fetes + ' fête' + (x.fetes > 1 ? 's' : '') + ' · ' + NM[x.mode] + '</span></td><td class="n">' + fmtServ(e.depuisOuverture + x.T) + '</td><td class="n">' + (i === 0 ? 'retenu' : '+' + fmtServ(x.T - r.scenarios[0].T)) + '</td><td class="n">' + (x.resume ? fmt(x.resume.pcJour) : '') + '</td><td class="n">' + (x.resume ? fmt(res) : '') + '</td></tr>';
     }).join('');
     // planning, avec population et PC par jour une fois finis les chantiers lancés jusqu’à la ligne, PC cumulés, case « Fait »
-    $('rPlanning').innerHTML = lignesPlanning(m.journal, base, { fait: true });
+    $('rPlanning').innerHTML = lignesPlanning(m.journal, base, { fait: true, retirer: true });
+    dessinerRetraits();
     $('rPlanning').querySelectorAll('input[data-k]').forEach(function (c) {
       c.onchange = function () {
         var lab = m.journal[+c.dataset.k].label;
@@ -2332,7 +2348,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         '<td class="c">' + (paye ? pastille(pnj, 'Oui', 'Non', 'pnj') : '') + '</td>' +
         '<td class="n">' + (j.pop != null && paye ? fmt(j.pop) : '') + '</td><td class="n">' + (j.pcj != null && paye ? fmt(j.pcj) : '') + '</td>' +
         '<td class="n">' + (j.pc != null && (paye || j.type === 'fete') ? fmt(Math.floor(j.pc)) : '') + '</td>' +
-        (opt.fait ? '<td class="coche"><input type="checkbox" data-k="' + k + '"' + (fait ? ' checked' : '') + ' aria-label="Fait : ' + esc(j.label) + '"></td>' : '') + '</tr>';
+        (opt.fait ? '<td class="coche"><input type="checkbox" data-k="' + k + '"' + (fait ? ' checked' : '') + ' aria-label="Fait : ' + esc(j.label) + '"></td>' : '') +
+        (opt.retirer ? '<td class="c">' + (j.ex ? '<button type="button" class="retirer petit" data-retirer="' + esc(j.ex) + '" data-label="' + esc(j.label) + '" title="Retirer cette action du plan" aria-label="Retirer : ' + esc(j.label) + '">×</button>' : '') + '</td>' : '') + '</tr>';
       if (paye) { pnj = false; dernier = j.t; }
     });
     return h;
@@ -2351,6 +2368,41 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     memoriser();
   }
   document.addEventListener('change', function (ev) { var c = ev.target; if (c.dataset && c.dataset.tache) basculerTache(c.dataset.tache, c.checked); });
+  function dessinerRetraits() {
+    var calcul = $('lancer').disabled;
+    $('rRetraits').innerHTML = retraits.length ? '<div class="retraits"><span class="aide">Actions retirées :</span>' +
+      retraits.map(function (x) { return '<span class="puce">' + esc(x.label) + (/^f/.test(x.cle) ? ' et suivantes' : '') + '<button type="button" data-retablir="' + esc(x.cle) + '" title="Rétablir" aria-label="Rétablir : ' + esc(x.label) + '">×</button></span>'; }).join('') +
+      '<span class="aide">' + (calcul ? 'Recherche d’un meilleur plan sans ces actions…' : 'Plan réoptimisé sans ces actions.') + '</span></div>' : '';
+  }
+  function majRetraits(message1) {
+    var m = resultat && resultat.r && resultat.r.meilleur;
+    if (!m || !m.plan) return;
+    var e = entree(), m2 = Moteur.rejouer(e, m.plan, m.borne);
+    if (!isFinite(m2.T)) return false; // sans cette action, le plan ne mène plus au départ
+    resultat = { e: e, r: Object.assign({}, resultat.r, { meilleur: m2 }) };
+    afficherResultat(e, resultat.r);
+    message(message1, 'ok');
+    memoriser();
+    // puis le moteur cherche un meilleur plan sans ces actions (le résultat se met à jour tout seul)
+    $('lancer').click();
+    dessinerRetraits();
+    return true;
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-retirer],[data-retablir]');
+    if (!b) return;
+    if (b.dataset.retirer) {
+      var x = { cle: b.dataset.retirer, label: b.dataset.label };
+      retraits.push(x);
+      if (majRetraits('« ' + x.label + ' » retirée : plan recalculé sans elle. Le moteur cherche maintenant un meilleur plan.') === false) {
+        retraits.pop();
+        message('Impossible de retirer « ' + x.label + ' » : sans elle, les colons ne peuvent plus partir (action indispensable).', 'err');
+      }
+    } else {
+      retraits = retraits.filter(function (y) { return y.cle !== b.dataset.retablir; });
+      majRetraits('Action rétablie. Le moteur cherche de nouveau le meilleur plan.');
+    }
+  });
   function ligne(l, v, t) { return '<div class="somme' + (t ? ' t' : '') + '"><span>' + l + '</span><span class="chiffre">' + fmt(v) + '</span></div>'; }
 
   // ---------- ma stratégie : le joueur liste ses actions, le moteur calcule délais et faisabilité ----------
@@ -2464,6 +2516,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (!strat.length) { derniereStrat = null; $('sResultat').style.display = 'none'; return; }
     var e = entree(), r;
     e.heros.mode = $('sHeros').value;
+    e.exclusions = []; // vos lignes sont vos choix : les retraits ne visent que les propositions du moteur
     try { r = Moteur.strategie(e, strat.map(versMoteur), { auto: $('sAuto').checked }); }
     catch (x) { $('sResultat').style.display = 'flex'; $('sAlertes').innerHTML = '<div class="msg err">Calcul impossible : ' + esc(x.message) + '</div>'; return; }
     derniereStrat = r;
@@ -2580,6 +2633,16 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (k === 'niveau') majActuels();
   });
 
+  // ---------- nouvelle version en ligne ----------
+  (function () {
+    var ici = (document.querySelector('meta[name=version]') || {}).content;
+    if (!ici || !/^https?:/.test(location.protocol)) return;
+    fetch(location.pathname, { cache: 'no-store' }).then(function (x) { return x.text(); }).then(function (h) {
+      var m = h.match(/<meta name="version" content="([^"]+)"/);
+      if (m && m[1] !== ici) { $('bandeauVersion').hidden = false; }
+    }).catch(function () { /* hors ligne */ });
+    $('rechargerVersion').onclick = function () { location.reload(); };
+  })();
   // ---------- démarrage ----------
   // ---------- sauvegarde de la simulation ----------
   // Saisies (et dernier résultat) : dans un fichier JSON à la demande, et dans ce navigateur à chaque changement.
@@ -2598,7 +2661,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         champs: champsSaisis, radios: radios,
         inventaire: Array.prototype.map.call(document.querySelectorAll('.inv'), function (x) { return x.value; }),
         bonus25: Array.prototype.map.call(document.querySelectorAll('.b25'), function (x) { return x.checked; }),
-        niveaux: niveaux, copies: copies, troupes: troupes, niveauxChamps: champs.map(function (c) { return c.n; }), faits: faits, strategie: strat, touchees: touchees
+        niveaux: niveaux, copies: copies, troupes: troupes, niveauxChamps: champs.map(function (c) { return c.n; }), faits: faits, strategie: strat, touchees: touchees, retraits: retraits
       },
       resultat: resultat
     };
@@ -2625,6 +2688,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     faits = s.faits || {};
     strat = s.strategie || [];
     touchees = s.touchees || [];
+    retraits = s.retraits || [];
     controler();
     dessinerStrat(); if (strat.length) calculerStrat();
     if (resultat) afficherResultat(resultat.e, resultat.r);
@@ -2761,6 +2825,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (t.length) p.t = t;
     if (s.strategie && s.strategie.length) p.g = s.strategie;
     if (s.touchees && s.touchees.length) p.u = s.touchees;
+    if (s.retraits && s.retraits.length) p.w = s.retraits;
     p.f = s.niveauxChamps.every(function (n) { return n < 10; }) ? s.niveauxChamps.join('') : s.niveauxChamps.join(',');
     var m = resultat && resultat.r && resultat.r.meilleur;
     if (m && m.plan) {
@@ -2779,7 +2844,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       var niv = typeof d.f === 'string' ? (d.f.indexOf(',') >= 0 ? d.f.split(',') : d.f.split('')).map(Number) : [];
       restaurer({ application: 'course-2e-village', resultat: null, saisie: {
         champs: d.c || {}, radios: d.r || {}, inventaire: d.i || [0, 0, 0, 0], bonus25: (d.b || '').split('').map(function (x) { return x === '1'; }),
-        niveaux: d.n || {}, copies: (d.k || []).map(function (c) { return { gid: c[0], n: c[1] }; }), troupes: d.t || [], niveauxChamps: niv, faits: {}, strategie: d.g || [], touchees: d.u || [] } });
+        niveaux: d.n || {}, copies: (d.k || []).map(function (c) { return { gid: c[0], n: c[1] }; }), troupes: d.t || [], niveauxChamps: niv, faits: {}, strategie: d.g || [], touchees: d.u || [], retraits: d.w || [] } });
       if (!d.p) return;
       var e3 = entree(), mode = d.p.m === 'c' ? 'combat' : 'production';
       var m3 = Moteur.rejouer(e3, { actions: decoderActions(d.p.a), v: d.p.v, mode: mode, nom: nomCode(d.p.n) }, d.p.b);
