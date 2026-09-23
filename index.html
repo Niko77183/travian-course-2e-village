@@ -337,6 +337,11 @@ td.coche{text-align:center}
       <div class="aide">Chaque feuille de route du guide T4.6 est adaptée à votre village (étapes déjà faites sautées), jouée telle quelle, puis ajustée par le moteur ; la recherche libre du moteur concourt aussi. Il y a toujours au moins un plan.</div>
       <div class="defile"><table><thead><tr><th>Scénario</th><th>Départ</th><th>Écart</th><th>PC / jour après</th><th>Ressources / h après</th></tr></thead><tbody id="rScenarios"></tbody></table></div>
     </section>
+    <section class="carte">
+      <h2>Pillage attendu</h2>
+      <div class="aide">Butin que le plan compte rapporter à partir de maintenant : héros (s’il reste en combat) et troupes de pillage, y compris celles que le plan forme. Il suit les saisies de l’onglet 2.</div>
+      <div id="rPillage"></div>
+    </section>
     <div class="trois">
       <section class="carte"><h2>Dépensé à ce stade</h2><div class="aide">Coût de tout ce qui existe déjà : chaque niveau des champs et bâtiments, exemplaires compris, et les troupes.</div><div id="rAcquis"></div></section>
       <section class="carte"><h2>Produit depuis l’ouverture</h2><div class="aide">Estimation : ce qui a été dépensé, plus le stock actuel, moins le stock de départ.</div><div id="rProduit"></div></section>
@@ -643,6 +648,11 @@ var Moteur = (function () {
       s.stock[r] = x;
     }
     s.pc += p.pcJour * dt / J;
+    if (s.journal) { // courbe du pillage (rejeu seulement) : paliers de butin horaire constant
+      var ph = s.heros.mode === 'combat' ? s.butinHeros : 0, seg = s.pil || (s.pil = []), der = seg[seg.length - 1];
+      if (der && der.taux === p.pillage && der.heros === ph && Math.abs(der.fin - s.t) < 1e-6) der.fin = t;
+      else seg.push({ debut: s.t, fin: t, taux: p.pillage, heros: ph });
+    }
     s.t = t;
   }
   function traiterEvenements(s) {
@@ -1388,7 +1398,28 @@ var Moteur = (function () {
       pcJour: p.pcJour, prodNet: p.net, pc: s.pc, fetes: s.fetes,
       depense: s.depense, compta: s.compta, or: or, stockDepart: depart,
       stockFinal: [0, 1, 2, 3].map(function (r) { return s.stock[r] + s.reserve[r]; }),
-      acquis: bilanActuel(e), alertes: alertes
+      acquis: bilanActuel(e), pillage: resumePillage(s, T), alertes: alertes
+    };
+  }
+  // pillage attendu : butin horaire au début et au départ, cumul sur 12 h, 24 h et jusqu'au départ, et ses paliers
+  function resumePillage(s, T) {
+    var seg = s.pil || [], fin = isFinite(T) ? T : s.t;
+    var cumul = function (x, champ) {
+      var tot = 0;
+      seg.forEach(function (g) { var d = Math.min(g.fin, x) - g.debut; if (d > 0) tot += (champ ? g[champ] : g.taux) * d / H; });
+      return tot;
+    };
+    var p = production(s), hFin = s.heros.mode === 'combat' ? s.butinHeros : 0;
+    var paliers = [];
+    seg.forEach(function (g) {
+      var der = paliers[paliers.length - 1];
+      if (!der || der.taux !== g.taux || der.heros !== g.heros) paliers.push({ t: g.debut, taux: g.taux, heros: g.heros });
+    });
+    return {
+      debut: seg.length ? seg[0].taux : p.pillage, herosDebut: seg.length ? seg[0].heros : hFin,
+      fin: p.pillage, herosFin: hFin, duree: fin,
+      h12: cumul(Math.min(12 * H, fin)), h24: cumul(Math.min(24 * H, fin)),
+      total: cumul(fin), totalHeros: cumul(fin, 'heros'), paliers: paliers
     };
   }
   // ce que le village a déjà coûté (chaque niveau de chaque champ et bâtiment, exemplaires compris, et les troupes),
@@ -1814,6 +1845,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       };
     });
 
+    afficherPillage(e, m, base);
     if (!m.compta || !m.acquis) { // simulation enregistrée avant l'ajout du bilan : relancer le calcul pour l'obtenir
       ['rAcquis', 'rProduit', 'rManques'].forEach(function (id) { $(id).innerHTML = '<div class="aide">Relancez le calcul pour obtenir ce bilan.</div>'; });
       $('rBalance').innerHTML = '';
@@ -1862,6 +1894,30 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     }).join('');
     $('rOrDetail').innerHTML = ligne('Travian Plus', or.plus) + ligne('Bonus +25 %', or.bonus) + ligne('Terminer maintenant', or.fin) + ligne('Marchand PNJ', or.pnj) + ligne('Maître bâtisseur', or.maitre) + ligne('Total', orTot, true);
     $('rAlertes').innerHTML = m.alertes.map(function (a) { return '<div class="msg att">' + a + '</div>'; }).join('');
+  }
+  // pillage attendu : par heure, sur 12 h, sur 24 h et jusqu'au départ des colons
+  function afficherPillage(e, m, base) {
+    var pl = m.pillage;
+    if (!pl) { $('rPillage').innerHTML = '<div class="aide">Relancez le calcul pour obtenir le pillage attendu.</div>'; return; }
+    var sansTroupes = e.butinTroupes > 0 && pl.debut - pl.herosDebut < 0.5
+      ? '<div class="msg att">Butin des troupes saisi (' + fmt(e.butinTroupes) + '/h), mais aucune troupe de pillage n’est déclarée à l’onglet 2 : ce butin n’est pas compté.</div>' : '';
+    if (pl.total < 0.5 && pl.fin < 0.5) { $('rPillage').innerHTML = sansTroupes + '<div class="aide">Aucun pillage dans ce plan' + (sansTroupes ? '.' : ' : pas de butin saisi à l’onglet 2 (ou le héros reste en production, ce qui rapporte plus).') + '</div>'; return; }
+    var herosTxt = function (h) { return h >= 0.5 ? '<div class="aide">dont héros ' + fmt(h) + '</div>' : ''; };
+    var court = pl.duree < 24 * 3600;
+    var h = sansTroupes + '<div class="trois">' +
+      '<div>' + ligne('Par heure, maintenant', pl.debut) + herosTxt(pl.herosDebut) +
+        ligne('Par heure, au départ des colons', pl.fin) + herosTxt(pl.herosFin) +
+        ligne('Moyenne par heure sur le plan', pl.duree > 0 ? pl.total / (pl.duree / 3600) : 0) + '</div>' +
+      '<div>' + ligne('Sur les 12 prochaines heures', pl.h12) + ligne('Sur les 24 prochaines heures', pl.h24) +
+        (court ? '<div class="aide">Les colons partent avant 24 h : cumul arrêté au départ.</div>' : '') + '</div>' +
+      '<div>' + ligne('Total jusqu’au départ des colons', pl.total, true) + '<div class="aide">Sur ' + fmtServ(pl.duree) + (pl.totalHeros >= 0.5 ? ', dont héros ' + fmt(pl.totalHeros) : '') + ', soit ' + fmt(pl.total / 4) + ' de chaque ressource.</div></div>' +
+      '</div>';
+    if (pl.paliers.length > 1) {
+      h += '<div class="defile"><table><thead><tr><th>À partir de (serveur)</th><th>Butin par heure</th><th>dont héros</th></tr></thead><tbody>' +
+        pl.paliers.map(function (p) { return '<tr><td class="n">' + fmtDate(base + p.t * 1000) + ' · ' + fmtServ(e.depuisOuverture + p.t) + '</td><td class="n">' + fmt(p.taux) + '</td><td class="n">' + fmt(p.heros) + '</td></tr>'; }).join('') +
+        '</tbody></table></div>';
+    }
+    $('rPillage').innerHTML = h;
   }
   function ligne(l, v, t) { return '<div class="somme' + (t ? ' t' : '') + '"><span>' + l + '</span><span class="chiffre">' + fmt(v) + '</span></div>'; }
 
