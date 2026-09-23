@@ -4,104 +4,137 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Course au 2e village</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--fond:#f4efe4;--carte:#fffdf8;--encre:#2a241b;--doux:#6b6254;--trait:#ddd3c0;--trait2:#efe6d2;--champ:#c9bda6;--vert:#3f6b2a;--vert2:#2c4d1d;--vertf:#e8f0df;--ambre:#7a4a0e;--ambref:#f6e7cf;--rouge:#8a1f1f;--rougef:#f7dede}
+:root{
+  --fond:#f5f3ee;--carte:#ffffff;--encre:#1d1a16;--doux:#6f675c;--pale:#9a9184;
+  --trait:#e4ddd0;--trait2:#efeae0;--champ:#d6cebf;--survol:#faf8f3;
+  --vert:#2f5d3a;--vert2:#24482d;--vertf:#eaf1ea;--ambre:#8a5a12;--ambref:#f7eedd;--rouge:#9b2c2c;--rougef:#f8e7e5;
+  --tete:#1b1916;--ombre:0 1px 2px rgba(29,26,22,.04),0 4px 16px rgba(29,26,22,.04);
+  --rayon:14px;
+}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;color:var(--encre);background:var(--fond)}
-h1,h2{font-family:Georgia,"Times New Roman",serif}
-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 32px;background:var(--encre);color:var(--fond)}
-header h1{margin:0;font-size:24px}
-nav{display:flex;gap:6px;flex-wrap:wrap}
-nav button{font:inherit;font-size:15px;padding:10px 16px;border-radius:8px;border:0;background:transparent;color:var(--fond);cursor:pointer}
-nav button[aria-selected=true]{background:var(--fond);color:var(--encre);font-weight:600}
-main{padding:24px 32px 40px;max-width:1400px;margin:0 auto}
-.onglet{display:none}.onglet.actif{display:block}
-.grille{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:start}
-.pile{display:flex;flex-direction:column;gap:24px}
-section.carte{background:var(--carte);border:1px solid var(--trait);border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:14px}
-section.carte h2{margin:0;font-size:21px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.45;color:var(--encre);background:var(--fond);-webkit-font-smoothing:antialiased}
+h1,h2{font-family:Inter,"Segoe UI",system-ui,sans-serif;letter-spacing:-.01em}
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:14px 20px;flex-wrap:wrap;padding:14px 32px;background:var(--tete);color:#f3efe6}
+header h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em}
+nav{display:flex;gap:2px;flex-wrap:wrap;background:rgba(255,255,255,.06);padding:4px;border-radius:12px}
+nav button{font:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:9px;border:0;background:transparent;color:#cfc8bb;cursor:pointer;transition:background .15s,color .15s}
+nav button:hover{color:#fff;background:rgba(255,255,255,.06)}
+nav button[aria-selected=true]{background:#f3efe6;color:var(--encre);font-weight:600}
+main{padding:28px 32px 56px;max-width:1440px;margin:0 auto}
+.onglet{display:none}.onglet.actif{display:block;animation:apparait .22s ease-out}
+@keyframes apparait{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.onglet.actif{animation:none}*{transition:none!important}}
+.grille{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+.pile{display:flex;flex-direction:column;gap:20px}
+section.carte{background:var(--carte);border:1px solid var(--trait);border-radius:var(--rayon);padding:22px 24px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--ombre)}
+section.carte h2{margin:0;font-size:17px;font-weight:600}
 .aide{font-size:13px;color:var(--doux)}
-label.champ{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:500}
-input,select,textarea{font:inherit;font-weight:400;padding:9px 10px;border:1px solid var(--champ);border-radius:8px;background:#fff;color:var(--encre)}
-input[type=checkbox],input[type=radio]{accent-color:var(--vert);width:18px;height:18px}
-input[type=range]{accent-color:var(--vert);padding:0}
-textarea{font-family:Consolas,monospace;font-size:13px;min-height:130px;resize:vertical}
+label.champ{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;color:var(--doux)}
+input,select,textarea{font:inherit;font-size:14px;font-weight:400;padding:9px 11px;border:1px solid var(--champ);border-radius:9px;background:#fff;color:var(--encre);transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--vert);box-shadow:0 0 0 3px rgba(47,93,58,.14)}
+button:focus-visible{outline:2px solid var(--vert);outline-offset:2px}
+input[type=checkbox],input[type=radio]{accent-color:var(--vert);width:17px;height:17px}
+input[type=range]{accent-color:var(--vert);padding:0;border:0}
+input[type=range]:focus{box-shadow:none}
+textarea{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;min-height:130px;resize:vertical}
 .l3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .l2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .l4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.chiffre{font-family:Consolas,monospace}
-.boite{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--trait2);border-radius:8px;font-size:13px}
-.boite b{font-family:Consolas,monospace;font-size:16px;font-weight:500}
-.msg{display:flex;gap:10px;align-items:flex-start;font-size:14px;padding:10px 14px;border-radius:8px}
-.msg.ok{background:var(--vertf);color:var(--vert2)}.msg.att{background:var(--ambref);color:var(--ambre)}.msg.err{background:var(--rougef);color:var(--rouge)}
+.chiffre{font-variant-numeric:tabular-nums}
+.boite{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--trait2);border-radius:10px;font-size:13px}
+.boite b{font-variant-numeric:tabular-nums;font-size:16px;font-weight:600}
+.msg{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;padding:10px 14px;border-radius:10px;border:1px solid transparent}
+.msg.ok{background:var(--vertf);color:var(--vert2);border-color:#d5e4d6}.msg.att{background:var(--ambref);color:var(--ambre);border-color:#eedcbc}.msg.err{background:var(--rougef);color:var(--rouge);border-color:#efcfcb}
 .bats{display:flex;flex-direction:column}
-.bat{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr) 52px;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--trait2);font-size:14px}
-.bat.verrou{color:var(--doux)}
-.bat input[type=number]{width:52px;padding:6px;text-align:right}
-.bat.copie{grid-template-columns:minmax(120px,190px) minmax(0,1fr) 52px 36px}
-.retirer{width:36px;height:36px;border:1px solid var(--champ);border-radius:8px;background:#fff;color:var(--rouge);cursor:pointer;font-size:18px;line-height:1}
+.bat{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr) 56px;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--trait2);font-size:14px}
+.bat.verrou{color:var(--pale)}
+.bat input[type=number]{width:56px;padding:6px 8px;text-align:right}
+.bat.copie{grid-template-columns:minmax(120px,190px) minmax(0,1fr) 56px 34px}
+.retirer{width:34px;height:34px;border:1px solid var(--trait);border-radius:9px;background:#fff;color:var(--rouge);cursor:pointer;font-size:17px;line-height:1;transition:background .15s,border-color .15s}
+.retirer:hover{background:var(--rougef);border-color:#efcfcb}
 .champs-type{display:grid;grid-template-columns:120px repeat(6,minmax(0,52px));gap:6px;align-items:center;font-size:14px}
 .champs-type input{padding:6px;text-align:center}
 .unite{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px}
 .unite input{width:84px;text-align:right}
 .choix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.choix label{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--champ);border-radius:10px;font-size:14px;cursor:pointer}
-.choix label:has(input:checked){border:2px solid var(--vert);background:#eef4e7}
-.source{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--champ);border-radius:10px}
-.source:has(input[name=butinSource]:checked){border:2px solid var(--vert);background:#f6f9f1}
+.choix label{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--trait);border-radius:12px;font-size:14px;cursor:pointer;transition:border-color .15s,background .15s}
+.choix label:hover{border-color:var(--champ)}
+.choix label:has(input:checked){border-color:var(--vert);background:var(--vertf);box-shadow:inset 0 0 0 1px var(--vert)}
+.source{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:1px solid var(--trait);border-radius:12px;transition:border-color .15s,background .15s}
+.source:has(input[name=butinSource]:checked){border-color:var(--vert);background:#f7faf6;box-shadow:inset 0 0 0 1px var(--vert)}
 .source:not(:has(input[name=butinSource]:checked)) > :not(.titre-source){opacity:.45}
-.titre-source{display:flex;gap:10px;align-items:center;font-size:15px;font-weight:600;cursor:pointer}
-.ou{text-align:center;font-size:13px;color:var(--doux);text-transform:uppercase;letter-spacing:.08em}
-.outils{display:flex;gap:8px;flex-wrap:wrap}
-.outils button,.outils label{font:inherit;font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid #6b6254;background:transparent;color:var(--fond);cursor:pointer}
-dialog{border:0;border-radius:14px;padding:0;max-width:640px;width:calc(100% - 32px);background:var(--carte);color:var(--encre);box-shadow:0 20px 60px rgba(0,0,0,.35)}
-dialog::backdrop{background:rgba(42,36,27,.55)}
-.dlg{display:flex;flex-direction:column;gap:14px;padding:20px 22px}
+.titre-source{display:flex;gap:10px;align-items:center;font-size:14.5px;font-weight:600;cursor:pointer}
+.ou{text-align:center;font-size:11.5px;color:var(--pale);text-transform:uppercase;letter-spacing:.12em}
+.outils{display:flex;gap:6px;flex-wrap:wrap}
+.outils button,.outils label{font:inherit;font-size:13.5px;font-weight:500;padding:7px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#e6e0d4;cursor:pointer;transition:background .15s,border-color .15s}
+.outils button:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.24)}
+dialog{border:0;border-radius:16px;padding:0;max-width:640px;width:calc(100% - 32px);background:var(--carte);color:var(--encre);box-shadow:0 24px 64px rgba(0,0,0,.28)}
+dialog::backdrop{background:rgba(27,25,22,.5)}
+.dlg{display:flex;flex-direction:column;gap:14px;padding:22px 24px}
 .dlg-tete{display:flex;justify-content:space-between;align-items:center}
-.dlg-tete h2{margin:0;font-size:21px}
-.fermer{width:40px;height:40px;border:1px solid var(--champ);border-radius:8px;background:#fff;font-size:20px;cursor:pointer;color:var(--encre)}
-.sim{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--trait2);font-size:14px}
+.dlg-tete h2{margin:0;font-size:18px;font-weight:600}
+.fermer{width:36px;height:36px;border:1px solid var(--trait);border-radius:9px;background:#fff;font-size:18px;cursor:pointer;color:var(--encre)}
+.sim{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--trait2);font-size:14px}
 .sim small{color:var(--doux)}
-.bandeau{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;padding:10px 32px;background:var(--vertf);color:var(--vert2);font-size:14px}
-.ligne-opt{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--trait2);font-size:14px}
-.bouton{font:inherit;font-size:16px;font-weight:600;padding:13px 22px;border:0;border-radius:10px;background:var(--vert);color:#fff;cursor:pointer}
-.bouton:disabled{opacity:.5;cursor:default}
-.bouton.second{background:transparent;color:var(--vert);border:1px solid var(--vert)}
+.bandeau{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;padding:10px 32px;background:var(--vertf);color:var(--vert2);font-size:14px;border-bottom:1px solid #d5e4d6}
+.ligne-opt{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--trait2);font-size:14px}
+.bouton{font:inherit;font-size:15px;font-weight:600;padding:12px 20px;border:0;border-radius:10px;background:var(--vert);color:#fff;cursor:pointer;transition:background .15s,transform .05s;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.bouton:hover{background:var(--vert2)}
+.bouton:active{transform:translateY(1px)}
+.bouton:disabled{opacity:.45;cursor:default}
+.bouton.second{background:#fff;color:var(--vert);border:1px solid var(--champ);box-shadow:none}
+.bouton.second:hover{border-color:var(--vert);background:var(--vertf)}
 .pied{display:flex;justify-content:space-between;margin-top:24px}
-.calcul{background:var(--encre);color:var(--fond);border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:12px}
-.barre{height:10px;background:#4a4033;border-radius:5px;overflow:hidden}.barre div{height:100%;width:0;background:#9bc57a;transition:width .3s}
+.calcul{background:var(--tete);color:#f3efe6;border-radius:var(--rayon);padding:22px 24px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--ombre)}
+.barre{height:8px;background:#3a352e;border-radius:4px;overflow:hidden}.barre div{height:100%;width:0;background:#8fbf7a;transition:width .3s}
 .kpis{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:16px}
-.kpi{background:var(--carte);border:1px solid var(--trait);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:6px}
-.kpi.fort{background:var(--encre);color:var(--fond);border:0}
-.kpi .v{font-family:Consolas,monospace;font-size:26px}
-.kpi.fort .v{font-family:Georgia,serif;font-size:36px;font-weight:700}
-table{border-collapse:collapse;width:100%;font-size:14px}
-.defile{overflow-x:auto}
-th{text-align:left;font-weight:500;color:var(--doux);padding:8px 8px 8px 0;border-bottom:1px solid var(--trait)}
-td{padding:8px 8px 8px 0;border-top:1px solid var(--trait2);vertical-align:top}
-tr.tache td{background:#eef4e7}tr.depart td{font-weight:600}tr.info td{color:var(--doux)}
-td.n{font-family:Consolas,monospace;white-space:nowrap}
-table.balance td:not(:first-child),table.balance th:not(:first-child){text-align:right;font-family:Consolas,monospace;white-space:nowrap}
+.kpi{background:var(--carte);border:1px solid var(--trait);border-radius:var(--rayon);padding:18px 20px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--ombre)}
+.kpi.fort{background:var(--tete);color:#f3efe6;border:0}
+.kpi .v{font-variant-numeric:tabular-nums;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.kpi.fort .v{font-size:34px;font-weight:700}
+.kpi.fort .chiffre{color:#cfc8bb;font-size:14px}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px}
+.defile{overflow:auto;max-height:70vh;border:1px solid var(--trait);border-radius:12px;background:#fff}
+th{position:sticky;top:0;z-index:1;background:#faf8f3;text-align:left;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--doux);padding:10px 12px;border-bottom:1px solid var(--trait);white-space:nowrap;vertical-align:bottom}
+td{padding:10px 12px;border-bottom:1px solid var(--trait2);vertical-align:middle}
+th+th,td+td{border-left:1px solid var(--trait2)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--survol)}
+th .aide{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.c,th.c{text-align:center}
+tr.tache td{background:#f5f9f3}tr.depart td{font-weight:600;background:#f3f0e8}tr.info td{color:var(--pale);font-size:13px}
+table.balance td:not(:first-child),table.balance th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 table.balance tr.sous td{color:var(--doux)}
-table.balance tr.total td{font-weight:600;border-top:2px solid var(--trait)}
-tr.fait td{color:var(--doux);text-decoration:line-through}
+table.balance tr.total td{font-weight:600;border-top:1px solid var(--trait)}
+tr.fait td{color:var(--pale);text-decoration:line-through}
 tr.fait td:last-child{text-decoration:none}
 td.coche{text-align:center}
 .trois{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.somme{display:flex;justify-content:space-between;font-size:14px}.somme.t{border-top:1px solid var(--trait);padding-top:8px;font-weight:600}
-.strat td{vertical-align:middle}
-.strat select{max-width:260px}
-.strat input[type=number]{width:70px;text-align:right;padding:6px}
+.somme{display:flex;justify-content:space-between;font-size:14px;font-variant-numeric:tabular-nums}.somme.t{border-top:1px solid var(--trait);padding-top:8px;font-weight:600}
+.pastille{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;line-height:1.5;white-space:nowrap}
+.pastille.oui{background:var(--vertf);color:var(--vert2)}.pastille.non{background:var(--rougef);color:var(--rouge)}.pastille.neutre{background:#f1eee7;color:var(--pale);font-weight:500}.pastille.pnj{background:var(--ambref);color:var(--ambre)}
+.raison{display:block;margin-top:4px;font-size:12px;color:var(--rouge);max-width:260px;white-space:normal}
+.strat select{max-width:250px;padding:7px 9px}
+.strat input[type=number]{width:68px;text-align:right;padding:6px 8px}
 .strat .ordre{display:flex;gap:4px}
-.strat .ordre button{width:32px;height:32px;border:1px solid var(--champ);border-radius:8px;background:#fff;cursor:pointer;font-size:14px;color:var(--encre)}
-.strat .ordre button.retirer{color:var(--rouge)}
-.strat tr.ko td{background:var(--rougef)}
-.strat .etat-ok{color:var(--vert2);font-weight:600}.strat .etat-ko{color:var(--rouge);font-weight:600}
+.strat .ordre button{width:30px;height:30px;border:1px solid var(--trait);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;color:var(--doux);transition:background .15s,border-color .15s}
+.strat .ordre button:hover{border-color:var(--champ);background:var(--survol);color:var(--encre)}
+.strat .ordre button.retirer{color:var(--rouge);font-size:15px}
+.strat tr.ko td{background:#fdf6f5}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
-@media (max-width:900px){.grille,.kpis,.trois{grid-template-columns:1fr}main{padding:16px}header{padding:14px 16px}.l4{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:600px){.l3,.l2,.choix{grid-template-columns:1fr}.champs-type{grid-template-columns:repeat(6,minmax(0,1fr))}.champs-type span{grid-column:1/-1}}
+.options-strat{display:flex;gap:10px 28px;flex-wrap:wrap;align-items:center;font-size:14px}
+.options-strat label{display:flex;gap:10px;align-items:center}
+@media (max-width:900px){.grille,.kpis,.trois{grid-template-columns:1fr}main{padding:18px 16px 40px}header{padding:12px 16px;position:static}.l4{grid-template-columns:repeat(2,minmax(0,1fr))}.bandeau{padding:10px 16px}}
+@media (max-width:600px){.l3,.l2,.choix{grid-template-columns:1fr}.champs-type{grid-template-columns:repeat(6,minmax(0,1fr))}.champs-type span{grid-column:1/-1}nav{width:100%;overflow-x:auto;flex-wrap:nowrap}nav button{white-space:nowrap}}
 </style>
 </head>
 <body>
@@ -322,7 +355,7 @@ tr.auto td{color:var(--doux);font-style:italic}
       </section>
       <div class="calcul">
         <div id="manques" class="aide" style="color:#e9c98f"></div>
-        <button class="bouton" id="lancer" style="background:#5b8f3c">Lancer le calcul</button>
+        <button class="bouton" id="lancer" style="background:#4f8a3a">Lancer le calcul</button>
         <div class="somme"><span>Scénarios testés</span><span class="chiffre" id="pTestes">—</span></div>
         <div class="barre"><div id="pBarre"></div></div>
         <div class="somme"><span>Meilleur départ trouvé</span><span class="chiffre" id="pMeilleur">—</span></div>
@@ -365,8 +398,8 @@ tr.auto td{color:var(--doux);font-style:italic}
     </section>
     <section class="carte">
       <h2>Planning</h2>
-      <div class="aide">Population et PC par jour : ceux du village une fois l’action terminée. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation.</div>
-      <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th title="Valeurs du village une fois terminés tous les chantiers lancés jusqu’à cette ligne">Population · PC/jour<br><span class="aide">chantiers lancés finis</span></th><th>PC cumulés</th><th>Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
+      <div class="aide">Population et PC par jour : une fois terminés les chantiers lancés jusqu’à la ligne. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation.</div>
+      <div class="defile"><table><thead><tr><th class="n">Date</th><th>Action</th><th class="n">Coût</th><th class="n" title="Temps écoulé depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th><th class="c">Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
     </section>
     <section class="carte" style="max-width:520px"><h2>Or, par fonction</h2><div id="rOrDetail"></div></section>
     <div id="rAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -376,19 +409,21 @@ tr.auto td{color:var(--doux);font-style:italic}
   <div style="display:flex;flex-direction:column;gap:24px">
     <section class="carte">
       <h2>Ma stratégie</h2>
-      <div class="aide">Listez vous-même ce que vous voulez faire, dans l’ordre. Le moteur le joue au plus tôt, avec vos saisies des onglets 1 à 3 (village, production, héros, or) et les mêmes règles que ses propres plans : ressources payées au lancement, file de chantiers, dépôt et silo, 20 emplacements. Chaque ligne attend que la précédente soit lancée. Délais et faisabilité se recalculent à chaque modification.<br><b>Ressources réunies</b> : l’heure où l’on peut payer la ligne. <b>Lancement</b> : l’heure où elle part vraiment, c’est-à-dire la plus tardive entre les ressources réunies et les autres conditions (fête en cours, colon en formation, file de chantiers pleine, prérequis en construction, ligne précédente) ; la cause est écrite en dessous. <b>Fin</b> : fin du chantier, de la fête ou de la formation.</div>
+      <div class="aide">Listez vos actions dans l’ordre : le moteur les joue au plus tôt avec vos saisies des onglets 1 à 3 et indique quand les ressources de chaque ligne sont réunies. Chaque ligne attend que la précédente soit lancée.</div>
       <div class="ajout">
         <select id="sType" aria-label="Type de ligne à ajouter">
           <option value="champ">Champs</option><option value="bat">Bâtiment</option><option value="nouveau">Nouvel exemplaire (cachette…)</option>
           <option value="fete">Petite fête</option><option value="troupe">Troupes</option><option value="colon">Colons</option><option value="attente">Attendre la fin du chantier en cours</option><option value="depart">Départ des colons</option>
         </select>
-        <button type="button" class="bouton" id="sAjouter" style="padding:9px 16px;font-size:15px">Ajouter la ligne</button>
-        <button type="button" class="bouton second" id="sImporter" style="padding:9px 16px;font-size:15px">Partir du plan du moteur</button>
-        <button type="button" class="bouton second" id="sVider" style="padding:9px 16px;font-size:15px">Tout effacer</button>
+        <button type="button" class="bouton" id="sAjouter">Ajouter la ligne</button>
+        <button type="button" class="bouton second" id="sImporter">Partir du plan du moteur</button>
+        <button type="button" class="bouton second" id="sVider">Tout effacer</button>
       </div>
-      <label style="display:flex;gap:10px;align-items:center;font-size:14px">Héros pendant la stratégie <select id="sHeros"><option value="production">en production</option><option value="combat">en combat (pille)</option></select></label>
-      <label style="display:flex;gap:10px;align-items:center;font-size:14px"><input type="checkbox" id="sAuto" checked> Construire d’abord les prérequis manquants, et agrandir le dépôt ou le silo quand un coût les dépasse (lignes ajoutées en italique)</label>
-      <div class="defile"><table class="strat"><thead><tr><th>#</th><th>Action</th><th>Au départ</th><th>Niveau visé ou nombre</th><th title="Heure où les ressources de la ligne sont disponibles : production, récompenses, inventaire du héros, marchand PNJ si l’option est cochée">Ressources réunies</th><th title="Heure où la ligne part dans le jeu, et ce qui fixe cette heure">Lancement<br><span class="aide">et ce qui le fixe</span></th><th>Fin</th><th>Coût total</th><th title="Valeurs du village une fois terminés tous les chantiers lancés jusqu’à cette ligne">Population · PC/jour<br><span class="aide">chantiers lancés finis</span></th><th>PC cumulés</th><th>Faisable ?</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
+      <div class="options-strat">
+        <label>Héros <select id="sHeros"><option value="production">en production</option><option value="combat">en combat (pille)</option></select></label>
+        <label><input type="checkbox" id="sAuto" checked> Ajouter les prérequis manquants et agrandir dépôt ou silo si besoin</label>
+      </div>
+      <div class="defile"><table class="strat"><thead><tr><th class="n">#</th><th>Action</th><th class="n">Actuel</th><th class="n">Visé</th><th class="n" title="Date et heure où les ressources de la ligne sont disponibles">Ressources réunies</th><th class="n" title="Temps d’attente des ressources depuis le lancement de la ligne précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Coût</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">Population</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">PC / jour</th><th class="n">PC cumulés</th><th class="c">Faisable</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
       <div id="sVide" class="aide">Aucune ligne pour l’instant : ajoutez-en, ou partez du plan retenu par le moteur (onglet 4) pour le retoucher.</div>
     </section>
     <div id="sResultat" style="display:none;flex-direction:column;gap:24px">
@@ -401,8 +436,8 @@ tr.auto td{color:var(--doux);font-style:italic}
       <div id="sAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
       <section class="carte">
         <h2>Déroulé détaillé</h2>
-        <div class="aide">Chaque niveau, dans l’ordre où il est lancé. En italique : ce que le moteur a ajouté (prérequis, dépôt, silo). Le stock est celui qui reste juste après l’action : vous pouvez y suivre d’où vient chaque paiement (production, récompenses de tâches encaissées, inventaire du héros, marchand PNJ si l’option est cochée à l’onglet 3).</div>
-        <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Ligne</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th>Population · PC/jour</th><th>PC cumulés</th><th>Stock après (et inventaire du héros)</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
+        <div class="aide">Chaque niveau dans l’ordre où il est lancé. En italique : ce que le moteur a ajouté (prérequis, dépôt, silo).</div>
+        <div class="defile"><table><thead><tr><th class="n">Date</th><th class="n">Ligne</th><th>Action</th><th class="n">Coût</th><th class="n" title="Temps écoulé depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
       </section>
       <section class="carte" style="max-width:640px"><h2>À la fin de la stratégie</h2><div id="sBilan"></div></section>
     </div>
@@ -1704,7 +1739,7 @@ var Moteur = (function () {
       }
       // population et PC par jour une fois finis les chantiers lancés jusqu'ici, PC cumulés au dernier lancement de la ligne
       // (mêmes conventions que le planning du moteur automatique)
-      res.push({ ok: !raison, raison: raison, faits: faits, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null,
+      res.push({ ok: !raison, raison: raison, faits: faits, t0: t0, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null,
         pop: etat ? etat.pop : null, pcj: etat ? etat.pcj : null, pc: etat ? etat.pc : null, stock: etat ? etat.stock : null,
         attentes: attentes, goulot: plusLong(attentes), pnj: pnj,
         ressources: suivi.tRes !== undefined ? suivi.tRes : null, pnjRessources: !!suivi.pnjRes, cause: causeLancement(suivi, t0) });
@@ -2151,13 +2186,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       return '<tr' + (i === 0 ? ' class="tache"' : '') + '><td>' + (x.nom || '') + '<br><span class="aide">' + x.fetes + ' fête' + (x.fetes > 1 ? 's' : '') + ' · ' + NM[x.mode] + '</span></td><td class="n">' + fmtServ(e.depuisOuverture + x.T) + '</td><td class="n">' + (i === 0 ? 'retenu' : '+' + fmtServ(x.T - r.scenarios[0].T)) + '</td><td class="n">' + (x.resume ? fmt(x.resume.pcJour) : '') + '</td><td class="n">' + (x.resume ? fmt(res) : '') + '</td></tr>';
     }).join('');
     // planning, avec population et PC par jour une fois finis les chantiers lancés jusqu’à la ligne, PC cumulés, case « Fait »
-    $('rPlanning').innerHTML = m.journal.map(function (j, k) {
-      var cls = j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien' || j.type === 'attente') ? 'info' : '';
-      var fait = !!faits[j.label];
-      return '<tr class="' + cls + (fait ? ' fait' : '') + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td><td class="n">' + fmtServ(e.depuisOuverture + j.t) + '</td><td>' + j.label + '</td><td class="n">' + (j.cout ? j.cout.map(fmt).join(' · ') : '') + '</td><td class="n">' + (j.duree ? Moteur.fmtDuree(j.duree) : '') + '</td><td class="n">' + (j.fin ? fmtDate(base + j.fin * 1000) : '') + '</td><td>' + (j.gain || '') + (j.or ? ' · ' + j.or + ' or' : '') + '</td>' +
-        '<td class="n">' + (j.pop != null ? fmt(j.pop) + ' · ' + fmt(j.pcj) : '') + '</td><td class="n">' + (j.pc != null ? fmt(Math.floor(j.pc)) : '') + '</td>' +
-        '<td class="coche"><input type="checkbox" data-k="' + k + '"' + (fait ? ' checked' : '') + ' aria-label="Fait : ' + j.label.replace(/"/g, '') + '"></td></tr>';
-    }).join('');
+    $('rPlanning').innerHTML = lignesPlanning(m.journal, base, { fait: true });
     $('rPlanning').querySelectorAll('input[type=checkbox]').forEach(function (c) {
       c.onchange = function () {
         var lab = m.journal[+c.dataset.k].label;
@@ -2241,6 +2270,39 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     }
     $('rPillage').innerHTML = h;
   }
+  // durée courte : « 45 min », « 4 h 05 », « 1 j 03 h »
+  function duree(s) {
+    if (!(s >= 60)) return '—';
+    var m = Math.round(s / 60), h = Math.floor(m / 60), j = Math.floor(h / 24);
+    if (j) return j + ' j ' + pad(h % 24) + ' h';
+    return h ? h + ' h ' + pad(m % 60) : m + ' min';
+  }
+  function pastille(oui, texteOui, texteNon, classeOui) {
+    return oui ? '<span class="pastille ' + (classeOui || 'oui') + '">' + texteOui + '</span>' : '<span class="pastille neutre">' + texteNon + '</span>';
+  }
+  // lignes d'un planning : date, action, coût total, attente depuis l'action précédente, marchand PNJ, population, PC/jour, PC cumulés
+  // (les échanges au marchand PNJ ne font pas de ligne : ils sont signalés sur l'action qu'ils ont permise)
+  function lignesPlanning(journal, base, opt) {
+    var h = '', pnj = false, dernier = 0;
+    journal.forEach(function (j, k) {
+      if (j.type === 'or' && /Marchand/.test(j.label)) { pnj = true; return; }
+      var paye = !!(j.cout && j.type !== 'or');
+      var cls = j.auto ? 'auto' : j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien' || j.type === 'attente') ? 'info' : '';
+      var fait = opt.fait && !!faits[j.label];
+      var libelle = esc(j.label) + (j.auto ? ' (ajouté)' : '') + ((j.type === 'tache' || j.type === 'quotidien') && j.gain ? ' <span class="aide">· ' + esc(j.gain) + '</span>' : '') + (j.or ? ' <span class="aide">· ' + j.or + ' or</span>' : '');
+      h += '<tr class="' + cls + (fait ? ' fait' : '') + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td>' +
+        (opt.ligne ? '<td class="n">' + (j.ligne !== undefined ? j.ligne + 1 : '') + '</td>' : '') +
+        '<td>' + libelle + '</td>' +
+        '<td class="n">' + (paye ? fmt(j.cout[0] + j.cout[1] + j.cout[2] + j.cout[3]) : '') + '</td>' +
+        '<td class="n">' + (paye ? duree(j.t - dernier) : '') + '</td>' +
+        '<td class="c">' + (paye ? pastille(pnj, 'Oui', 'Non', 'pnj') : '') + '</td>' +
+        '<td class="n">' + (j.pop != null && paye ? fmt(j.pop) : '') + '</td><td class="n">' + (j.pcj != null && paye ? fmt(j.pcj) : '') + '</td>' +
+        '<td class="n">' + (j.pc != null && (paye || j.type === 'fete') ? fmt(Math.floor(j.pc)) : '') + '</td>' +
+        (opt.fait ? '<td class="coche"><input type="checkbox" data-k="' + k + '"' + (fait ? ' checked' : '') + ' aria-label="Fait : ' + esc(j.label) + '"></td>' : '') + '</tr>';
+      if (paye) { pnj = false; dernier = j.t; }
+    });
+    return h;
+  }
   function ligne(l, v, t) { return '<div class="somme' + (t ? ' t' : '') + '"><span>' + l + '</span><span class="chiffre">' + fmt(v) + '</span></div>'; }
 
   // ---------- ma stratégie : le joueur liste ses actions, le moteur calcule délais et faisabilité ----------
@@ -2276,7 +2338,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   }
   // exemplaires connus avant la ligne k : ceux du village, puis ceux que les lignes précédentes créent
   function exemplairesAvant(k) {
-    var l = copies.map(function (c, j) { return { j: j, gid: c.gid, nom: BAT[c.gid].nom + ' n° ' + rangCopie(j) + ' (niv ' + c.n + ')' }; });
+    var l = copies.map(function (c, j) { return { j: j, gid: c.gid, nom: BAT[c.gid].nom + ' n° ' + rangCopie(j) }; });
     var parGid = {}; copies.forEach(function (c) { parGid[c.gid] = (parGid[c.gid] || 1) + 1; });
     for (var q = 0; q < k; q++) if (strat[q].t === 'bat' && strat[q].c === 'nouveau') {
       var g = +strat[q].gid; parGid[g] = (parGid[g] || 1) + 1;
@@ -2289,16 +2351,16 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (l.t === 'champ') {
       [0, 1, 2, 3, 4].forEach(function (r) { h += '<option value="r' + r + '"' + (l.cible === 'r' + r ? ' selected' : '') + '>' + TOUS_CHAMPS[r] + '</option>'; });
       h += '<optgroup label="Un seul champ">';
-      champs.forEach(function (c, i) { h += '<option value="i' + i + '"' + (l.cible === 'i' + i ? ' selected' : '') + '>' + NOM_CHAMP[c.r] + ' n° ' + rangChamp(i) + ' (niv ' + c.n + ')</option>'; });
+      champs.forEach(function (c, i) { h += '<option value="i' + i + '"' + (l.cible === 'i' + i ? ' selected' : '') + '>' + NOM_CHAMP[c.r] + ' n° ' + rangChamp(i) + '</option>'; });
       return '<select data-k="cible" aria-label="Champs visés">' + h + '</optgroup></select>';
     }
     if (l.t === 'bat' && l.c === 'nouveau') {
-      typesCopie().forEach(function (b) { h += '<option value="' + b.gid + '"' + (+l.gid === b.gid ? ' selected' : '') + '>' + b.nom + '</option>'; });
-      return '<span class="aide">Nouvel exemplaire :</span><br><select data-k="gid" aria-label="Bâtiment à construire en plus">' + h + '</select>';
+      typesCopie().forEach(function (b) { h += '<option value="' + b.gid + '"' + (+l.gid === b.gid ? ' selected' : '') + '>Nouvel exemplaire : ' + b.nom + '</option>'; });
+      return '<select data-k="gid" aria-label="Bâtiment à construire en plus">' + h + '</select>';
     }
     if (l.t === 'bat') {
       var val = l.c >= 0 ? 'c' + l.c : 'g' + l.gid;
-      batimentsTribu().forEach(function (b) { h += '<option value="g' + b.gid + '"' + (val === 'g' + b.gid ? ' selected' : '') + '>' + b.nom + (niveaux[b.gid] ? ' (niv ' + niveaux[b.gid] + ')' : '') + '</option>'; });
+      batimentsTribu().forEach(function (b) { h += '<option value="g' + b.gid + '"' + (val === 'g' + b.gid ? ' selected' : '') + '>' + b.nom + '</option>'; });
       var ex = exemplairesAvant(k);
       if (ex.length) { h += '<optgroup label="Exemplaires supplémentaires">'; ex.forEach(function (x) { h += '<option value="c' + x.j + '"' + (val === 'c' + x.j ? ' selected' : '') + '>' + esc(x.nom) + '</option>'; }); h += '</optgroup>'; }
       return '<select data-k="bat" aria-label="Bâtiment">' + h + '</select>';
@@ -2311,14 +2373,14 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   }
   function auDepart(l, k) {
     if (l.t === 'champ') {
-      if (l.cible[0] === 'i') return 'niv ' + champs[+l.cible.slice(1)].n;
+      if (l.cible[0] === 'i') return champs[+l.cible.slice(1)].n;
       var ns = champs.filter(function (c) { return +l.cible.slice(1) === 0 || c.r === +l.cible.slice(1); }).map(function (c) { return c.n; });
       var a = Math.min.apply(null, ns), b = Math.max.apply(null, ns);
-      return 'niv ' + (a === b ? a : a + ' à ' + b);
+      return a === b ? a : a + ' – ' + b;
     }
     if (l.t === 'bat' && l.c === 'nouveau') return '—';
-    if (l.t === 'bat') { if (l.c >= 0) { var x = copies[l.c]; return x ? 'niv ' + x.n : 'créée plus haut'; } return 'niv ' + (niveaux[l.gid] || 0); }
-    if (l.t === 'troupe') return fmt(troupes[+l.u] || 0) + ' en place';
+    if (l.t === 'bat') { if (l.c >= 0) { var x = copies[l.c]; return x ? x.n : '—'; } return niveaux[l.gid] || 0; }
+    if (l.t === 'troupe') return fmt(troupes[+l.u] || 0);
     return '';
   }
   function maxLigne(l) {
@@ -2334,8 +2396,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     $('sImporter').disabled = !(resultat && resultat.r && resultat.r.meilleur && resultat.r.meilleur.journal);
     $('sLignes').innerHTML = strat.map(function (l, k) {
       var champ = l.t === 'depart' ? '' : '<input type="number" min="1" max="' + maxLigne(l) + '" value="' + (l.t === 'champ' || l.t === 'bat' ? l.niveau : l.n) + '" data-k="' + (l.t === 'champ' || l.t === 'bat' ? 'niveau' : 'n') + '" aria-label="' + (l.t === 'champ' || l.t === 'bat' ? 'Niveau visé' : 'Nombre') + ', ligne ' + (k + 1) + '">';
-      return '<tr data-l="' + k + '"><td class="n">' + (k + 1) + '</td><td>' + optionsLigne(l, k) + '</td><td class="aide">' + auDepart(l, k) + '</td><td>' + champ + '</td>' +
-        '<td class="n" data-c="res"></td><td class="n" data-c="debut"></td><td class="n" data-c="fin"></td><td class="n" data-c="cout"></td><td class="n" data-c="pop"></td><td class="n" data-c="pc"></td><td data-c="etat"></td>' +
+      return '<tr data-l="' + k + '"><td class="n">' + (k + 1) + '</td><td>' + optionsLigne(l, k) + '</td><td class="n">' + auDepart(l, k) + '</td><td class="n">' + champ + '</td>' +
+        '<td class="n" data-c="res"></td><td class="n" data-c="att"></td><td class="c" data-c="pnj"></td><td class="n" data-c="cout"></td><td class="n" data-c="pop"></td><td class="n" data-c="pcj"></td><td class="n" data-c="pc"></td><td class="c" data-c="etat"></td>' +
         '<td><div class="ordre"><button type="button" data-act="haut" aria-label="Monter la ligne ' + (k + 1) + '">▲</button><button type="button" data-act="bas" aria-label="Descendre la ligne ' + (k + 1) + '">▼</button><button type="button" class="retirer" data-act="suppr" aria-label="Supprimer la ligne ' + (k + 1) + '">×</button></div></td></tr>';
     }).join('');
   }
@@ -2352,18 +2414,18 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   function planifierStrat() { clearTimeout(minuterieStrat); minuterieStrat = setTimeout(function () { calculerStrat(); memoriser(); }, 250); }
   function afficherStrat(e, r) {
     var base = instantCollage() || Date.now(), d = e.depuisOuverture, som = function (a) { return a[0] + a[1] + a[2] + a[3]; };
-    var quand = function (t) { return t === null ? '—' : fmtDate(base + t * 1000) + '<br><span class="aide">' + fmtServ(d + t) + '</span>'; };
     document.querySelectorAll('#sLignes tr').forEach(function (tr) {
       var x = r.lignes[+tr.dataset.l]; if (!x) return;
+      var c = function (n) { return tr.querySelector('[data-c=' + n + ']'); };
       tr.classList.toggle('ko', !x.ok);
-      tr.querySelector('[data-c=res]').innerHTML = x.ok || x.ressources !== null ? quand(x.ressources) + (x.pnjRessources ? '<br><span class="aide">avec marchand PNJ</span>' : '') : '—';
-      tr.querySelector('[data-c=debut]').innerHTML = quand(x.debut) + (x.cause ? '<br><span class="aide">fixé par ' + esc(x.cause) + '</span>' : '');
-      tr.querySelector('[data-c=fin]').innerHTML = quand(x.fin);
-      tr.querySelector('[data-c=cout]').textContent = som(x.cout) ? fmt(som(x.cout)) : '';
-      tr.querySelector('[data-c=pop]').textContent = x.pop != null ? fmt(x.pop) + ' · ' + fmt(x.pcj) : '';
-      tr.querySelector('[data-c=pc]').textContent = x.pc != null ? fmt(Math.floor(x.pc)) : '';
-      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.pnj ? '<br><span class="aide">marchand PNJ ×' + x.pnj + ' (' + 3 * x.pnj + ' or)</span>' : '')
-        : '<span class="etat-ko">Non</span><br><span class="aide">' + esc(x.raison) + '</span>';
+      c('res').textContent = x.ressources !== null && x.ressources !== undefined ? fmtDate(base + x.ressources * 1000) : '—';
+      c('att').textContent = x.ressources !== null && x.ressources !== undefined ? duree(x.ressources - x.t0) : '—';
+      c('pnj').innerHTML = x.ressources !== null && x.ressources !== undefined ? pastille(x.pnj > 0, 'Oui', 'Non', 'pnj') : '';
+      c('cout').textContent = som(x.cout) ? fmt(som(x.cout)) : '—';
+      c('pop').textContent = x.pop != null ? fmt(x.pop) : '—';
+      c('pcj').textContent = x.pcj != null ? fmt(x.pcj) : '—';
+      c('pc').textContent = x.pc != null ? fmt(Math.floor(x.pc)) : '—';
+      c('etat').innerHTML = x.ok ? pastille(true, 'Oui') : '<span class="pastille non">Non</span><span class="raison">' + esc(x.raison) + '</span>';
     });
     $('sResultat').style.display = 'flex';
     // départ des colons, comparé au plan du moteur
@@ -2393,12 +2455,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (strat.some(function (l) { return l.t === 'troupe'; })) al.push('<div class="msg att">Troupes : la recherche de l’unité à l’Académie est supposée déjà faite.</div>');
     if (!al.length) al.push('<div class="msg ok">Toutes les lignes sont faisables.</div>');
     $('sAlertes').innerHTML = al.join('');
-    $('sPlanning').innerHTML = r.journal.map(function (j) {
-      var cls = j.auto ? 'auto' : j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien' || j.type === 'attente') ? 'info' : '';
-      return '<tr class="' + cls + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td><td class="n">' + fmtServ(d + j.t) + '</td><td class="n">' + (j.ligne !== undefined ? j.ligne + 1 : '') + '</td><td>' + esc(j.label) + (j.auto ? ' (ajouté)' : '') + '</td><td class="n">' + (j.cout ? j.cout.map(fmt).join(' · ') : '') + '</td><td class="n">' + (j.duree ? Moteur.fmtDuree(j.duree) : '') + '</td><td class="n">' + (j.fin ? fmtDate(base + j.fin * 1000) : '') + '</td><td>' + esc(j.gain || '') + (j.or ? ' · ' + j.or + ' or' : '') + '</td>' +
-        '<td class="n">' + (j.pop != null ? fmt(j.pop) + ' · ' + fmt(j.pcj) : '') + '</td><td class="n">' + (j.pc != null ? fmt(Math.floor(j.pc)) : '') + '</td>' +
-        '<td class="n">' + (j.stock ? j.stock.map(fmt).join(' · ') + (j.reserve && som(j.reserve) ? '<br><span class="aide">+ héros ' + j.reserve.map(fmt).join(' · ') + '</span>' : '') : '') + '</td></tr>';
-    }).join('');
+    $('sPlanning').innerHTML = lignesPlanning(r.journal, base, { ligne: true });
     var dep = r.depense, depTot = ['champs', 'batiments', 'fetes', 'troupes', 'depart'].reduce(function (a, k2) { return a + som(dep[k2]); }, 0);
     var orTot = r.or.fin + r.or.pnj + r.or.maitre;
     $('sBilan').innerHTML = ['Bois', 'Argile', 'Fer', 'Céréales (nettes)'].map(function (n, i) { return ligne('Production par heure : ' + n, r.prodNet[i]); }).join('') +
