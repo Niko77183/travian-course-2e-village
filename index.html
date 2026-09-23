@@ -401,8 +401,8 @@ tr.auto td{color:var(--doux);font-style:italic}
       <div id="sAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
       <section class="carte">
         <h2>Déroulé détaillé</h2>
-        <div class="aide">Chaque niveau, dans l’ordre où il est lancé. En italique : ce que le moteur a ajouté (prérequis, dépôt, silo).</div>
-        <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Ligne</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th>Population · PC/jour</th><th>PC cumulés</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
+        <div class="aide">Chaque niveau, dans l’ordre où il est lancé. En italique : ce que le moteur a ajouté (prérequis, dépôt, silo). Le stock est celui qui reste juste après l’action : vous pouvez y suivre d’où vient chaque paiement (production, récompenses de tâches encaissées, inventaire du héros, marchand PNJ si l’option est cochée à l’onglet 3).</div>
+        <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Ligne</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th>Population · PC/jour</th><th>PC cumulés</th><th>Stock après (et inventaire du héros)</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
       </section>
       <section class="carte" style="max-width:640px"><h2>À la fin de la stratégie</h2><div id="sBilan"></div></section>
     </div>
@@ -1566,6 +1566,7 @@ var Moteur = (function () {
       if (pre === ATTENTE) {
         var f = s.lanes.length ? prochaineFinChantier(s) : Infinity;
         if (!isFinite(f)) return 'prérequis introuvable';
+        if (attentes && f - s.t > 60) attentes['un prérequis en construction'] = (attentes['un prérequis en construction'] || 0) + f - s.t;
         avancerJusqua(s, f); continue;
       }
       if (pre) {
@@ -1578,12 +1579,26 @@ var Moteur = (function () {
         marquer(k0);
         continue;
       }
-      var go = goulot(s, coutAction(s, a));
-      if (executer(s, a, HORIZON)) { if (attentes && go.r >= 0) attentes[go.r] += go.t; return null; }
+      // ce qui fera attendre : la ressource la plus lente à venir, ou une fête, un colon, la file de chantiers
+      var go = goulot(s, coutAction(s, a)), autre = null;
+      if (a.k === 'fete' && s.feteFin > s.t) autre = { motif: 'la fête en cours', t: s.feteFin - s.t };
+      else if (a.k === 'colon' && s.colonFin >= 0) autre = { motif: 'le colon en formation', t: s.colonFin - s.t };
+      else if ((a.k === 'champ' || a.k === 'bat' || a.k === 'copie') && !placeLibre(s, a.k === 'champ')) autre = { motif: 'la file de chantiers', t: prochaineFinChantier(s) - s.t };
+      var t0 = s.t;
+      if (executer(s, a, HORIZON)) {
+        // attente réelle, attribuée à la fête, au colon ou à la file si le lancement tombe à leur fin, sinon à la ressource la plus lente
+        var reel = s.t - t0;
+        if (attentes && reel > 60) {
+          var motif = autre && Math.abs(reel - autre.t) < 60 ? autre.motif : go.r >= 0 ? NOMS_RES[go.r] : autre ? autre.motif : null;
+          if (motif) attentes[motif] = (attentes[motif] || 0) + reel;
+        }
+        return null;
+      }
       return raisonAttente(s, coutAction(s, a));
     }
     return 'trop d’étapes';
   }
+  function plusLong(o) { var m = null; Object.keys(o).forEach(function (k) { if (o[k] > 60 && (m === null || o[k] > o[m])) m = k; }); return m; }
   function strategie(entree, lignes, opt) {
     opt = opt || {};
     var e = JSON.parse(JSON.stringify(entree));
@@ -1593,7 +1608,7 @@ var Moteur = (function () {
     var marquer = function (k) { for (var q = k; q < s.journal.length; q++) if (s.journal[q].type === 'champ' || s.journal[q].type === 'batiment') s.journal[q].auto = true; };
     lignes.forEach(function (l, idx) {
       var k0 = s.journal.length, t0 = s.t, raison = null, faits = 0;
-      var attentes = [0, 0, 0, 0];
+      var attentes = {};
       var etape = function (a) { var r = jouerAction(s, a, opt.auto !== false, marquer, attentes); if (!r) faits++; return r; };
       if (l.t === 'bat') {
         var gid = +l.gid, c = l.c === 'nouveau' ? 'nouveau' : +l.c;
@@ -1642,9 +1657,10 @@ var Moteur = (function () {
         if (!raison) faits++;
       } else raison = 'ligne inconnue';
       // bornes de la ligne : lancement de sa première action, fin de la dernière
-      var debut = null, fin = null, cout = [0, 0, 0, 0], etat = null;
+      var debut = null, fin = null, cout = [0, 0, 0, 0], etat = null, pnj = 0;
       for (var j = k0; j < s.journal.length; j++) {
         var x = s.journal[j];
+        if (x.type === 'or') { x.ligne = idx; if (/Marchand/.test(x.label)) pnj++; continue; }
         if (!x.cout && x.type !== 'attente') continue;
         x.ligne = idx; etat = x;
         if (debut === null) debut = x.t;
@@ -1655,7 +1671,7 @@ var Moteur = (function () {
       // (mêmes conventions que le planning du moteur automatique)
       res.push({ ok: !raison, raison: raison, faits: faits, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null,
         pop: etat ? etat.pop : null, pcj: etat ? etat.pcj : null, pc: etat ? etat.pc : null, stock: etat ? etat.stock : null,
-        attentes: attentes, goulot: Math.max.apply(null, attentes) > 60 ? NOMS_RES[attentes.indexOf(Math.max.apply(null, attentes))] : null });
+        attentes: attentes, goulot: plusLong(attentes), pnj: pnj });
     });
     // tout ce qui est lancé se termine
     var tFin = s.t;
@@ -2305,7 +2321,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       tr.querySelector('[data-c=cout]').textContent = som(x.cout) ? fmt(som(x.cout)) : '';
       tr.querySelector('[data-c=pop]').textContent = x.pop != null ? fmt(x.pop) + ' · ' + fmt(x.pcj) : '';
       tr.querySelector('[data-c=pc]').textContent = x.pc != null ? fmt(Math.floor(x.pc)) : '';
-      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.attente > 3600 ? '<br><span class="aide">attente ' + fmtServ(x.attente) + (x.goulot ? ', surtout ' + (x.goulot === 'argile' ? 'l’argile' : x.goulot === 'céréales' ? 'les céréales' : 'le ' + x.goulot) : '') + '</span>' : '')
+      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.attente > 3600 ? '<br><span class="aide">attente ' + fmtServ(x.attente) + (x.goulot ? ', surtout ' + ({ bois: 'le bois', argile: 'l’argile', fer: 'le fer', 'céréales': 'les céréales' }[x.goulot] || x.goulot) : '') + '</span>' : '') +
+          (x.pnj ? '<br><span class="aide">marchand PNJ ×' + x.pnj + ' (' + 3 * x.pnj + ' or)</span>' : '')
         : '<span class="etat-ko">Non</span><br><span class="aide">' + esc(x.raison) + '</span>';
     });
     $('sResultat').style.display = 'flex';
@@ -2339,7 +2356,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     $('sPlanning').innerHTML = r.journal.map(function (j) {
       var cls = j.auto ? 'auto' : j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien' || j.type === 'attente') ? 'info' : '';
       return '<tr class="' + cls + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td><td class="n">' + fmtServ(d + j.t) + '</td><td class="n">' + (j.ligne !== undefined ? j.ligne + 1 : '') + '</td><td>' + esc(j.label) + (j.auto ? ' (ajouté)' : '') + '</td><td class="n">' + (j.cout ? j.cout.map(fmt).join(' · ') : '') + '</td><td class="n">' + (j.duree ? Moteur.fmtDuree(j.duree) : '') + '</td><td class="n">' + (j.fin ? fmtDate(base + j.fin * 1000) : '') + '</td><td>' + esc(j.gain || '') + (j.or ? ' · ' + j.or + ' or' : '') + '</td>' +
-        '<td class="n">' + (j.pop != null ? fmt(j.pop) + ' · ' + fmt(j.pcj) : '') + '</td><td class="n">' + (j.pc != null ? fmt(Math.floor(j.pc)) : '') + '</td></tr>';
+        '<td class="n">' + (j.pop != null ? fmt(j.pop) + ' · ' + fmt(j.pcj) : '') + '</td><td class="n">' + (j.pc != null ? fmt(Math.floor(j.pc)) : '') + '</td>' +
+        '<td class="n">' + (j.stock ? j.stock.map(fmt).join(' · ') + (j.reserve && som(j.reserve) ? '<br><span class="aide">+ héros ' + j.reserve.map(fmt).join(' · ') + '</span>' : '') : '') + '</td></tr>';
     }).join('');
     var dep = r.depense, depTot = ['champs', 'batiments', 'fetes', 'troupes', 'depart'].reduce(function (a, k2) { return a + som(dep[k2]); }, 0);
     var orTot = r.or.fin + r.or.pnj + r.or.maitre;
