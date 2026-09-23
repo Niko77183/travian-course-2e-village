@@ -2010,20 +2010,59 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (l.pop !== null && l.pop !== undefined) lignes.push('Population: ' + l.pop);
     return lignes.join('\n');
   }
+  // Version 3 : seules les saisies qui diffèrent de la page vierge, noms de scénarios codés,
+  // cases « Fait » repérées par leur numéro de ligne (le planning rejoué est identique).
+  var DEFAUTS = null; // saisies de la page vierge, relevées au démarrage
+  function nomsScenarios() {
+    var l = [];
+    (DATA.feuilles || []).forEach(function (f) { l.push(f.nom + ' (tel quel)', f.nom + ' — ajusté par le moteur'); });
+    ['Recherche libre du moteur', 'Fin de plan seule'].forEach(function (n) { l.push(n, n + ' — ajusté par le moteur'); });
+    return l;
+  }
+  function codeNom(n) { var i = nomsScenarios().indexOf(n); return i >= 0 ? i : n; }
+  function nomCode(c) { return typeof c === 'number' ? nomsScenarios()[c] : c; }
   function paquetPartage() {
-    var s = capturer().saisie;
+    var s = capturer().saisie, p = { v: 3 }, k;
     s.champs.collage = collageMinimal(lu);
-    var p = { v: 2, s: s };
+    p.c = {};
+    // la date du collage vaut par défaut « aujourd'hui » : toujours la transmettre, le lien peut être ouvert un autre jour
+    for (k in s.champs) if (!DEFAUTS || DEFAUTS.champs[k] !== s.champs[k] || k === 'dateCollage') p.c[k] = s.champs[k];
+    p.r = {};
+    for (k in s.radios) if (!DEFAUTS || DEFAUTS.radios[k] !== s.radios[k]) p.r[k] = s.radios[k];
+    if (s.inventaire.some(function (x) { return +x; })) p.i = s.inventaire.map(Number);
+    p.b = s.bonus25.map(function (x) { return x ? 1 : 0; }).join('');
+    p.n = s.niveaux;
+    if (s.copies.length) p.k = s.copies.map(function (c) { return [c.gid, c.n]; });
+    var t = s.troupes.slice(); while (t.length && !t[t.length - 1]) t.pop();
+    if (t.length) p.t = t;
+    p.f = s.niveauxChamps.every(function (n) { return n < 10; }) ? s.niveauxChamps.join('') : s.niveauxChamps.join(',');
     var m = resultat && resultat.r && resultat.r.meilleur;
     if (m && m.plan) {
       var r = resultat.r;
-      p.p = { a: encoderActions(m.plan.actions), v: m.plan.v, m: m.plan.mode, n: m.plan.nom, b: Math.round(m.borne) };
-      p.sc = (r.scenarios || []).map(function (x) { return [x.nom, x.mode, x.fetes, Math.round(x.T), x.resume ? Math.round(x.resume.pcJour) : null, x.resume ? x.resume.prodNet.map(Math.round) : null]; });
-      p.t = r.testes; p.d = Math.round(r.secondes * 10) / 10;
+      p.p = { a: encoderActions(m.plan.actions), v: m.plan.v, m: m.plan.mode === 'combat' ? 'c' : 'p', n: codeNom(m.plan.nom), b: Math.round(m.borne) };
+      p.s = (r.scenarios || []).map(function (x) {
+        return [codeNom(x.nom), x.mode === 'combat' ? 'c' : 'p', x.fetes, Math.round(x.T), x.resume ? Math.round(x.resume.pcJour) : null, x.resume ? Math.round(x.resume.prodNet.reduce(function (a, b) { return a + b; }, 0)) : null];
+      });
+      p.x = []; m.journal.forEach(function (j, i) { if (faits[j.label]) p.x.push(i); });
+      p.q = r.testes; p.d = Math.round(r.secondes * 10) / 10;
     }
     return p;
   }
   function ouvrirPaquet(d) {
+    if (d && d.v === 3) {
+      var niv = typeof d.f === 'string' ? (d.f.indexOf(',') >= 0 ? d.f.split(',') : d.f.split('')).map(Number) : [];
+      restaurer({ application: 'course-2e-village', resultat: null, saisie: {
+        champs: d.c || {}, radios: d.r || {}, inventaire: d.i || [0, 0, 0, 0], bonus25: (d.b || '').split('').map(function (x) { return x === '1'; }),
+        niveaux: d.n || {}, copies: (d.k || []).map(function (c) { return { gid: c[0], n: c[1] }; }), troupes: d.t || [], niveauxChamps: niv, faits: {} } });
+      if (!d.p) return;
+      var e3 = entree(), mode = d.p.m === 'c' ? 'combat' : 'production';
+      var m3 = Moteur.rejouer(e3, { actions: decoderActions(d.p.a), v: d.p.v, mode: mode, nom: nomCode(d.p.n) }, d.p.b);
+      faits = {}; (d.x || []).forEach(function (i) { if (m3.journal[i]) faits[m3.journal[i].label] = true; });
+      var sc3 = (d.s || []).map(function (x) { return { nom: nomCode(x[0]), mode: x[1] === 'c' ? 'combat' : 'production', fetes: x[2], T: x[3], resume: x[4] !== null ? { pcJour: x[4], prodNet: [x[5]] } : null }; });
+      resultat = { e: e3, r: { meilleur: m3, scenarios: sc3, testes: d.q || 0, secondes: d.d || 0 } };
+      afficherResultat(e3, resultat.r);
+      return;
+    }
     if (!d || d.v !== 2) { restaurer(d); return; } // ancien format : simulation complète
     restaurer({ application: 'course-2e-village', saisie: d.s, resultat: null });
     if (!d.p) return;
@@ -2123,6 +2162,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   document.addEventListener('click', function (ev) { if (ev.target.closest('.retirer,#ajouterCopie')) memoriser(); });
 
   dessinerChamps(); dessinerBats(); dessinerCopies(); dessinerUnites(); controler();
+  DEFAUTS = capturer().saisie; // la page vierge : référence pour ne partager que ce qui a changé
 
   // lien de partage ; sinon, dernière saisie de ce navigateur : proposée, jamais imposée (l'outil démarre vierge)
   if (!ouvrirPartage()) try {
