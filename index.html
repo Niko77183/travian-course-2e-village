@@ -131,6 +131,8 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+.deja{display:inline-flex;gap:6px;align-items:center;margin-left:10px;font-size:12px;color:var(--doux);font-style:normal;white-space:nowrap;cursor:pointer}.deja input{width:14px;height:14px}
+tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-decoration:line-through}
 .options-strat{display:flex;gap:10px 28px;flex-wrap:wrap;align-items:center;font-size:14px}
 .options-strat label{display:flex;gap:10px;align-items:center}
 @media (max-width:900px){.grille,.kpis,.trois{grid-template-columns:1fr}main{padding:18px 16px 40px}header{padding:12px 16px;position:static}.l4{grid-template-columns:repeat(2,minmax(0,1fr))}.bandeau{padding:10px 16px}}
@@ -347,6 +349,11 @@ tr.auto td{color:var(--doux);font-style:italic}
       <label class="ligne-opt" style="border:0"><input type="checkbox" id="oVideo" checked><span><b>Bonus vidéo</b> · −25 % sur chaque construction</span><span class="aide">gratuit</span></label>
     </section>
     <div class="pile">
+      <section class="carte">
+        <h2>Stratégie du moteur</h2>
+        <label class="ligne-opt" style="border:0;padding:0"><input type="checkbox" id="oTroupes" checked><span><b>Construction de troupes</b> · le moteur peut prévoir de former des troupes de pillage</span><span class="aide">oui / non</span></label>
+        <div class="aide">Décoché, aucun scénario ne forme de troupes. Coché, le moteur en forme seulement quand ça fait partir les colons plus tôt, avec les unités de pillage que vous avez déjà et votre butin saisi.</div>
+      </section>
       <section class="carte">
         <h2>Précision du calcul</h2>
         <label class="aide" for="precision">Plus la recherche est large, plus le plan est sûr, et plus le calcul est long.</label>
@@ -661,13 +668,20 @@ var Moteur = (function () {
       for (var i = 0; i < D.taches.length; i++) {
         var tc = D.taches[i];
         while (s.rang[i] < tc.paliers.length && valeurTache(s, tc) >= tc.paliers[s.rang[i]].palier) {
-          var p = tc.paliers[s.rang[i]];
+          var p = tc.paliers[s.rang[i]], cle = tc.nom + '|' + p.palier;
+          // palier que le joueur dit avoir déjà touché : rien n'est crédité
+          if (s.e.tachesTouchees && s.e.tachesTouchees.indexOf(cle) >= 0) {
+            s.rang[i]++;
+            if (s.journal) journaliser(s, { t: s.t, type: 'tache', label: 'Tâche « ' + tc.nom + ' » (' + p.palier + ')', gain: 'récompense non comptée', tache: true, cle: cle, touchee: true });
+            encore = true;
+            continue;
+          }
           // base × (1 + 2 % × (niveau − 1)), en calcul entier pour éviter 1 709,999… au lieu de 1 710
           var pour100 = 100 + 2 * Math.max(0, s.heros.niv - 1); // héros niveau 0 ou 1 : pas de bonus
           var res = Math.floor(p.baseRessources * pour100 / 100), xp = Math.floor(p.baseXP * pour100 / 100);
           ajouterRessources(s, [res, res, res, res], 'taches');
           s.rang[i]++;
-          if (s.journal) journaliser(s, { t: s.t, type: 'tache', label: 'Encaisser la tâche « ' + tc.nom + ' » (' + p.palier + ')', gain: '+' + res + ' de chaque · +' + xp + ' XP', tache: true });
+          if (s.journal) journaliser(s, { t: s.t, type: 'tache', label: 'Encaisser la tâche « ' + tc.nom + ' » (' + p.palier + ')', gain: '+' + res + ' de chaque · +' + xp + ' XP', tache: true, cle: cle });
           gagnerXp(s, xp);
           encore = true;
         }
@@ -1205,7 +1219,8 @@ var Moteur = (function () {
     if (!sansCopies && occ < EMPLACEMENTS) Object.keys(MULTIPLES).forEach(function (g) { if (copieAutorisee(s, +g)) out.push({ k: 'copie', gid: +g }); });
     if (s.bat[24] >= 1) out.push({ k: 'fete' });
     var unites = D.troupes[s.tribu].unites;
-    for (var u = 0; u < unites.length; u++) if (estPillard(unites[u]) && s.e.troupes && s.e.troupes[u] > 0 && s.butinParCapacite > 0) out.push({ k: 'troupe', u: u, n: 5 });
+    // option « Construction de troupes » décochée : le moteur ne forme aucune troupe
+    if (s.e.formerTroupes !== false) for (var u = 0; u < unites.length; u++) if (estPillard(unites[u]) && s.e.troupes && s.e.troupes[u] > 0 && s.butinParCapacite > 0) out.push({ k: 'troupe', u: u, n: 5 });
     return out;
   }
   function signature(s) {
@@ -1831,6 +1846,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   var lu = null; // ce que le collage a donné
   var resultat = null;
   var faits = {}; // lignes du planning cochées « Fait », par libellé
+  var touchees = []; // paliers de tâches déjà touchés dans le jeu (« nom|palier ») : leur récompense n'est pas comptée
 
   // ---------- onglets ----------
   function ouvrir(id) {
@@ -2078,7 +2094,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         mode: document.querySelector('input[name=mode]:checked').value, auto: $('hAuto').checked },
       troupes: troupes.slice(), butinHeros: bh, butinTroupes: bt,
       pc: +$('pc').value || 0, feteFinDans: ff !== null && ic !== null && ff > ic ? (ff - ic) / 1000 : null,
-      quotidien: +$('quotidien').value,
+      quotidien: +$('quotidien').value, tachesTouchees: touchees.slice(), formerTroupes: $('oTroupes').checked,
       or: { avecOr: document.querySelector('input[name=or]:checked').value === '1', plus: $('oPlus').checked, fin: $('oFin').value, pnj: $('oPnj').checked, maitre: $('oMaitre').checked, video: $('oVideo').checked },
     };
   }
@@ -2202,7 +2218,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     }).join('');
     // planning, avec population et PC par jour une fois finis les chantiers lancés jusqu’à la ligne, PC cumulés, case « Fait »
     $('rPlanning').innerHTML = lignesPlanning(m.journal, base, { fait: true });
-    $('rPlanning').querySelectorAll('input[type=checkbox]').forEach(function (c) {
+    $('rPlanning').querySelectorAll('input[data-k]').forEach(function (c) {
       c.onchange = function () {
         var lab = m.journal[+c.dataset.k].label;
         if (c.checked) faits[lab] = true; else delete faits[lab];
@@ -2304,8 +2320,9 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       var paye = !!(j.cout && j.type !== 'or');
       var cls = j.auto ? 'auto' : j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien' || j.type === 'attente') ? 'info' : '';
       var fait = opt.fait && !!faits[j.label];
-      var libelle = esc(j.label) + (j.auto ? ' (ajouté)' : '') + ((j.type === 'tache' || j.type === 'quotidien') && j.gain ? ' <span class="aide">· ' + esc(j.gain) + '</span>' : '') + (j.or ? ' <span class="aide">· ' + j.or + ' or</span>' : '');
-      h += '<tr class="' + cls + (fait ? ' fait' : '') + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td>' +
+      var libelle = '<span class="libelle">' + esc(j.label) + '</span>' + (j.auto ? ' (ajouté)' : '') + ((j.type === 'tache' || j.type === 'quotidien') && j.gain ? ' <span class="aide">· ' + esc(j.gain) + '</span>' : '') + (j.or ? ' <span class="aide">· ' + j.or + ' or</span>' : '') +
+        (j.type === 'tache' && j.cle ? '<label class="deja" title="Cochez si vous avez déjà touché cette récompense dans le jeu : elle ne sera pas comptée"><input type="checkbox" data-tache="' + esc(j.cle) + '"' + (j.touchee ? ' checked' : '') + '>déjà touchée</label>' : '');
+      h += '<tr class="' + cls + (fait ? ' fait' : '') + (j.touchee ? ' touchee' : '') + '"><td class="n">' + fmtDate(base + j.t * 1000) + '</td>' +
         (opt.ligne ? '<td class="n">' + (j.ligne !== undefined ? j.ligne + 1 : '') + '</td>' : '') +
         '<td>' + libelle + '</td>' +
         '<td class="n">' + (paye ? fmt(j.cout[0] + j.cout[1] + j.cout[2] + j.cout[3]) : '') + '</td>' +
@@ -2318,6 +2335,20 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     });
     return h;
   }
+  function basculerTache(cle, oui) {
+    touchees = touchees.filter(function (x) { return x !== cle; });
+    if (oui) touchees.push(cle);
+    if (strat.length) calculerStrat();
+    var m = resultat && resultat.r && resultat.r.meilleur;
+    if (m && m.plan) { // le plan retenu, rejoué sans cette récompense (relancer le calcul pour le réoptimiser)
+      var e = entree(), m2 = Moteur.rejouer(e, m.plan, m.borne);
+      resultat = { e: e, r: Object.assign({}, resultat.r, { meilleur: m2 }) };
+      afficherResultat(e, resultat.r);
+      message(oui ? 'Récompense retirée : le plan retenu est recalculé sans elle. Relancez le calcul (onglet 3) pour chercher un meilleur plan.' : 'Récompense de nouveau comptée.', 'ok');
+    }
+    memoriser();
+  }
+  document.addEventListener('change', function (ev) { var c = ev.target; if (c.dataset && c.dataset.tache) basculerTache(c.dataset.tache, c.checked); });
   function ligne(l, v, t) { return '<div class="somme' + (t ? ' t' : '') + '"><span>' + l + '</span><span class="chiffre">' + fmt(v) + '</span></div>'; }
 
   // ---------- ma stratégie : le joueur liste ses actions, le moteur calcule délais et faisabilité ----------
@@ -2565,7 +2596,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         champs: champsSaisis, radios: radios,
         inventaire: Array.prototype.map.call(document.querySelectorAll('.inv'), function (x) { return x.value; }),
         bonus25: Array.prototype.map.call(document.querySelectorAll('.b25'), function (x) { return x.checked; }),
-        niveaux: niveaux, copies: copies, troupes: troupes, niveauxChamps: champs.map(function (c) { return c.n; }), faits: faits, strategie: strat
+        niveaux: niveaux, copies: copies, troupes: troupes, niveauxChamps: champs.map(function (c) { return c.n; }), faits: faits, strategie: strat, touchees: touchees
       },
       resultat: resultat
     };
@@ -2591,6 +2622,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     resultat = d.resultat || null;
     faits = s.faits || {};
     strat = s.strategie || [];
+    touchees = s.touchees || [];
     controler();
     dessinerStrat(); if (strat.length) calculerStrat();
     if (resultat) afficherResultat(resultat.e, resultat.r);
@@ -2726,6 +2758,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     var t = s.troupes.slice(); while (t.length && !t[t.length - 1]) t.pop();
     if (t.length) p.t = t;
     if (s.strategie && s.strategie.length) p.g = s.strategie;
+    if (s.touchees && s.touchees.length) p.u = s.touchees;
     p.f = s.niveauxChamps.every(function (n) { return n < 10; }) ? s.niveauxChamps.join('') : s.niveauxChamps.join(',');
     var m = resultat && resultat.r && resultat.r.meilleur;
     if (m && m.plan) {
@@ -2744,7 +2777,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       var niv = typeof d.f === 'string' ? (d.f.indexOf(',') >= 0 ? d.f.split(',') : d.f.split('')).map(Number) : [];
       restaurer({ application: 'course-2e-village', resultat: null, saisie: {
         champs: d.c || {}, radios: d.r || {}, inventaire: d.i || [0, 0, 0, 0], bonus25: (d.b || '').split('').map(function (x) { return x === '1'; }),
-        niveaux: d.n || {}, copies: (d.k || []).map(function (c) { return { gid: c[0], n: c[1] }; }), troupes: d.t || [], niveauxChamps: niv, faits: {}, strategie: d.g || [] } });
+        niveaux: d.n || {}, copies: (d.k || []).map(function (c) { return { gid: c[0], n: c[1] }; }), troupes: d.t || [], niveauxChamps: niv, faits: {}, strategie: d.g || [], touchees: d.u || [] } });
       if (!d.p) return;
       var e3 = entree(), mode = d.p.m === 'c' ? 'combat' : 'production';
       var m3 = Moteur.rejouer(e3, { actions: decoderActions(d.p.a), v: d.p.v, mode: mode, nom: nomCode(d.p.n) }, d.p.b);
