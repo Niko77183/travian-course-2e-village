@@ -423,7 +423,7 @@ tr.auto td{color:var(--doux);font-style:italic}
         <label>Héros <select id="sHeros"><option value="production">en production</option><option value="combat">en combat (pille)</option></select></label>
         <label><input type="checkbox" id="sAuto" checked> Ajouter les prérequis manquants et agrandir dépôt ou silo si besoin</label>
       </div>
-      <div class="defile"><table class="strat"><thead><tr><th class="n">#</th><th>Action</th><th class="n">Actuel</th><th class="n">Visé</th><th class="n" title="Date et heure où les ressources de la ligne sont disponibles">Ressources réunies</th><th class="n" title="Temps d’attente des ressources depuis le lancement de la ligne précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Coût</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">Population</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">PC / jour</th><th class="n">PC cumulés</th><th class="c">Faisable</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
+      <div class="defile"><table class="strat"><thead><tr><th class="n">#</th><th>Action</th><th class="n">Actuel</th><th class="n">Visé</th><th class="n" title="Date et heure où la ligne entière est payable (pour plusieurs niveaux : les ressources du dernier niveau)">Ressources réunies</th><th class="n" title="Temps avant d’avoir ces ressources, depuis le lancement de la ligne précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Coût</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">Population</th><th class="n" title="Une fois terminés les chantiers lancés jusqu’ici">PC / jour</th><th class="n">PC cumulés</th><th class="c">Faisable</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
       <div id="sVide" class="aide">Aucune ligne pour l’instant : ajoutez-en, ou partez du plan retenu par le moteur (onglet 4) pour le retoucher.</div>
     </section>
     <div id="sResultat" style="display:none;flex-direction:column;gap:24px">
@@ -991,8 +991,9 @@ var Moteur = (function () {
       }
       var nv = niv(gid, n);
       cout = nv.cout;
-      if (!attendrePlace(s, champ, limite)) return false;
+      // d'abord les ressources (heure notée : « ressources réunies »), puis une place dans la file
       if (!attendreRessources(s, cout, limite)) return false;
+      s.tRessources = s.t;
       if (!attendrePlace(s, champ, limite)) return false;
       if (!attendreRessources(s, cout, limite)) return false;
       // le maître bâtisseur occupe la place au-delà de celles de base et de Travian Plus
@@ -1025,10 +1026,12 @@ var Moteur = (function () {
     }
     if (a.k === 'fete') {
       if (s.bat[24] < 1) return false;
-      if (s.feteFin > s.t) { if (s.feteFin > limite) return false; avancerJusqua(s, s.feteFin); }
       cout = D.fete.cout;
+      // d'abord les ressources, puis la fin de la fête en cours
       if (!attendreRessources(s, cout, limite)) return false;
-      if (s.feteFin > s.t) avancerJusqua(s, s.feteFin);
+      s.tRessources = s.t;
+      if (s.feteFin > s.t) { if (s.feteFin > limite) return false; avancerJusqua(s, s.feteFin); }
+      if (!attendreRessources(s, cout, limite)) return false;
       payer(s, cout, 'fetes');
       var gain = Math.min(D.fete.plafond, Math.floor(production(s).pcJour));
       s.pc += gain;
@@ -1048,6 +1051,7 @@ var Moteur = (function () {
       if (!a.manuel && (!s.e.troupes || !(s.e.troupes[a.u] > 0) || s.butinParCapacite <= 0)) return false;
       cout = u.cout.map(function (x) { return x * a.n; });
       if (!attendreRessources(s, cout, limite)) return false;
+      s.tRessources = s.t;
       payer(s, cout, 'troupes');
       var fact = niv(batForm, s.bat[batForm]).effets[cleT] || 1;
       var debutT = s.t;
@@ -1059,10 +1063,12 @@ var Moteur = (function () {
     }
     if (a.k === 'colon') {
       if (s.bat[25] < 10 || s.colonsFaits + (s.colonFin >= 0 ? 1 : 0) >= 3) return false;
-      if (s.colonFin >= 0) { if (s.colonFin > limite) return false; avancerJusqua(s, s.colonFin); }
       var uc = D.troupes[s.tribu].unites[9];
+      // d'abord les ressources, puis la fin du colon en formation
       if (!attendreRessources(s, uc.cout, limite)) return false;
-      if (s.colonFin >= 0) avancerJusqua(s, s.colonFin);
+      s.tRessources = s.t;
+      if (s.colonFin >= 0) { if (s.colonFin > limite) return false; avancerJusqua(s, s.colonFin); }
+      if (!attendreRessources(s, uc.cout, limite)) return false;
       payer(s, uc.cout, 'troupes');
       var dc = uc.tempsSec * niv(25, s.bat[25]).effets.trainingTimeResidence / s.v;
       if (s.journal) journaliser(s, { t: s.t, type: 'colon', label: libelle(s, a), cout: uc.cout, duree: dc, fin: s.t + dc });
@@ -1599,14 +1605,21 @@ var Moteur = (function () {
   }
   // heure où les ressources de la 1re action d'une ligne sont réunies (production, récompenses, inventaire du héros,
   // marchand PNJ si l'option est cochée), calculée sur une copie de l'état : indépendante de la fête en cours, de la file…
+  // (une ligne de plusieurs niveaux : c'est l'heure du dernier niveau qui compte, celle où toute la ligne est payable)
+  // l'heure est celle de la simulation elle-même (executer note quand les ressources sont réunies), pas une estimation
   function noter(s, cout, suivi, autre) {
-    if (!suivi || suivi.note) return;
-    suivi.note = true; suivi.tN = s.t; suivi.autre = autre;
-    var c = cloner(s), pnj0 = c.or.pnj;
-    var ok = attendreRessources(c, cout, HORIZON);
-    suivi.tRes = ok ? c.t : null; suivi.pnjRes = ok && c.or.pnj > pnj0;
+    if (!suivi) return;
+    if (!suivi.note) { suivi.note = true; suivi.tN = s.t; suivi.autre = autre; }
+    suivi.pnjAvant = s.or.pnj; s.tRessources = null;
   }
-  function lance(s, suivi) { if (suivi && suivi.lance === undefined) suivi.lance = s.t; }
+  function lance(s, suivi) {
+    if (!suivi) return;
+    var pnj = s.or.pnj > suivi.pnjAvant;
+    if (suivi.tRes0 === undefined) { suivi.tRes0 = s.tRessources; suivi.pnjRes0 = pnj; }
+    suivi.tRes = s.tRessources; suivi.pnjRes = !!suivi.pnjRes || pnj;
+    if (suivi.lance === undefined) suivi.lance = s.t;
+    suivi.dernier = s.t;
+  }
   function jouerAction(s, a, auto, marquer, attentes, suivi) {
     for (var garde = 0; garde < 200; garde++) {
       if (s.t > HORIZON) return 'au-delà de 180 jours';
@@ -1742,7 +1755,8 @@ var Moteur = (function () {
       res.push({ ok: !raison, raison: raison, faits: faits, t0: t0, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null,
         pop: etat ? etat.pop : null, pcj: etat ? etat.pcj : null, pc: etat ? etat.pc : null, stock: etat ? etat.stock : null,
         attentes: attentes, goulot: plusLong(attentes), pnj: pnj,
-        ressources: suivi.tRes !== undefined ? suivi.tRes : null, pnjRessources: !!suivi.pnjRes, cause: causeLancement(suivi, t0) });
+        ressources: suivi.tRes !== undefined ? suivi.tRes : null, pnjRessources: !!suivi.pnjRes, dernierLancement: suivi.dernier !== undefined ? suivi.dernier : null,
+        cause: causeLancement({ lance: suivi.lance, tRes: suivi.tRes0 === undefined ? null : suivi.tRes0, pnjRes: suivi.pnjRes0, tN: suivi.tN, autre: suivi.autre }, t0) });
     });
     // tout ce qui est lancé se termine
     var tFin = s.t;
@@ -1770,8 +1784,9 @@ var Moteur = (function () {
       if (t > s.t + 60) motif = 'les PC (' + D.pcRequis + ' requis)';
       avancerJusqua(s, t);
     }
-    if (suivi) { suivi.tN = t0; suivi.note = true; suivi.autre = motif ? { motif: motif } : null; var c = cloner(s); suivi.tRes = attendreRessources(c, [750, 750, 750, 750], HORIZON) ? c.t : null; }
+    if (suivi) { suivi.tN = t0; suivi.note = true; suivi.autre = motif ? { motif: motif } : null; suivi.pnjAvant = s.or.pnj; }
     if (!attendreRessources(s, [750, 750, 750, 750], HORIZON)) return raisonAttente(s, [750, 750, 750, 750]);
+    s.tRessources = s.t;
     lance(s, suivi);
     payer(s, [750, 750, 750, 750], 'depart');
     journaliser(s, { t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
