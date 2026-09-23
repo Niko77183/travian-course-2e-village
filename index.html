@@ -350,7 +350,7 @@ td.coche{text-align:center}
     <section class="carte">
       <h2>Planning</h2>
       <div class="aide">Population et PC par jour : ceux du village une fois l’action terminée. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation.</div>
-      <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th>Population · PC/jour</th><th>PC cumulés</th><th>Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
+      <div class="defile"><table><thead><tr><th>Heure (serveur)</th><th>Depuis l’ouverture</th><th>Action</th><th>Coût (bois · argile · fer · céréales)</th><th>Durée</th><th>Fin</th><th>Gain</th><th title="Valeurs du village une fois terminés tous les chantiers lancés jusqu’à cette ligne">Population · PC/jour<br><span class="aide">chantiers lancés finis</span></th><th>PC cumulés</th><th>Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
     </section>
     <section class="carte" style="max-width:520px"><h2>Or, par fonction</h2><div id="rOrDetail"></div></section>
     <div id="rAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -605,10 +605,13 @@ var Moteur = (function () {
       s.stock[r] = x;
     }
   }
-  // entrée du journal, avec l'état du village à cet instant (population, PC par jour, PC cumulés)
-  function journaliser(s, j) {
+  // entrée du journal : PC cumulés à cet instant ; population et PC par jour une fois terminés
+  // tous les chantiers lancés jusqu'à cette ligne (valeurs qui ne peuvent que monter d'une ligne à l'autre)
+  function journaliser(s, j, gain) {
     var p = production(s);
-    j.pc = s.pc; j.pop = p.pop; j.pcj = p.pcJour;
+    if (!s.proj) s.proj = { pop: p.pop, pcj: p.pcJour };
+    if (gain) { s.proj.pop += gain.pop; s.proj.pcj += gain.pcj; }
+    j.pc = s.pc; j.pop = s.proj.pop; j.pcj = s.proj.pcj;
     j.stock = s.stock.map(Math.round); j.cap = p.cap.slice(); // stock juste après l'action (paiement déduit)
     j.pertes = s.compta.pertes.map(Math.round); // pertes cumulées depuis le début du plan
     s.journal.push(j);
@@ -643,11 +646,10 @@ var Moteur = (function () {
     s.t = t;
   }
   function traiterEvenements(s) {
-    var i, change = false, finis = [];
+    var i, change = false;
     for (i = s.lanes.length - 1; i >= 0; i--) if (s.lanes[i].fin <= s.t + 1e-6) {
       var l = s.lanes.splice(i, 1)[0];
       if (l.champ) s.champs[l.cle].n++; else if (l.copie >= 0) s.copies[l.copie].n++; else s.bat[l.cle]++;
-      if (l.j) finis.push(l.j);
       change = true;
     }
     for (i = s.form.length - 1; i >= 0; i--) if (s.form[i].fin <= s.t + 1e-6) {
@@ -660,8 +662,6 @@ var Moteur = (function () {
     for (var r = 0; r < 4; r++) if (s.bonusTemp[r] > 0 && s.bonusTemp[r] <= s.t + 1e-6) { s.bonusTemp[r] = 0; change = true; }
     if (change) {
       invalider(s);
-      // population et PC par jour d'une construction : ceux du village une fois le chantier terminé
-      if (finis.length) { var pf = production(s); finis.forEach(function (j) { j.pop = pf.pop; j.pcj = pf.pcJour; }); }
       encaisserTaches(s);
     }
   }
@@ -897,7 +897,13 @@ var Moteur = (function () {
       var lane = { fin: instant ? s.t : fin, debut: debut, champ: champ, cle: cle, copie: copie, label: lab };
       s.lanes.push(lane);
       if (instant) s.or.fin += 2;
-      if (s.journal) lane.j = journaliser(s, { t: s.t, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0 });
+      if (s.journal) {
+        // gain de population et de PC par jour de ce niveau (hors cache : on monte le niveau le temps du calcul)
+        var monter = function (d) { if (champ) s.champs[cle].n += d; else if (copie >= 0) s.copies[copie].n += d; else s.bat[cle] += d; invalider(s); };
+        var p0 = production(s), pop0 = p0.pop, pcj0 = p0.pcJour;
+        monter(1); var p1 = production(s), gain = { pop: p1.pop - pop0, pcj: p1.pcJour - pcj0 }; monter(-1);
+        journaliser(s, { t: s.t, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0 }, gain);
+      }
       if (s.e.or.avecOr && s.e.or.fin === 'lot2' && s.lanes.length >= 2 && s.lanes.every(function (l) { return l.champ || l.cle !== 25; })) {
         s.lanes.forEach(function (l) { l.fin = s.t; });
         s.or.fin += 2;
@@ -1791,7 +1797,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       var res = x.resume ? x.resume.prodNet.reduce(function (a, b) { return a + b; }, 0) : 0;
       return '<tr' + (i === 0 ? ' class="tache"' : '') + '><td>' + (x.nom || '') + '<br><span class="aide">' + x.fetes + ' fête' + (x.fetes > 1 ? 's' : '') + ' · ' + NM[x.mode] + '</span></td><td class="n">' + fmtServ(e.depuisOuverture + x.T) + '</td><td class="n">' + (i === 0 ? 'retenu' : '+' + fmtServ(x.T - r.scenarios[0].T)) + '</td><td class="n">' + (x.resume ? fmt(x.resume.pcJour) : '') + '</td><td class="n">' + (x.resume ? fmt(res) : '') + '</td></tr>';
     }).join('');
-    // planning, avec population et PC par jour une fois l'action terminée, PC cumulés, case « Fait »
+    // planning, avec population et PC par jour une fois finis les chantiers lancés jusqu’à la ligne, PC cumulés, case « Fait »
     $('rPlanning').innerHTML = m.journal.map(function (j, k) {
       var cls = j.type === 'tache' ? 'tache' : j.type === 'depart' ? 'depart' : (j.type === 'heros' || j.type === 'quotidien') ? 'info' : '';
       var fait = !!faits[j.label];
