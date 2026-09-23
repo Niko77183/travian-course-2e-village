@@ -406,7 +406,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
     <section class="carte">
       <h2>Planning</h2>
       <div class="aide">Population et PC par jour : une fois terminés les chantiers lancés jusqu’à la ligne. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation.</div>
-      <div class="defile"><table><thead><tr><th class="n">Date</th><th>Action</th><th class="n">Coût</th><th class="n" title="Temps écoulé depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th><th class="c">Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
+      <div class="defile"><table><thead><tr><th class="n" title="Heure de lancement">Date</th><th>Action</th><th class="n">Coût</th><th class="n" title="Heure où les ressources de l’action sont disponibles">Ressources réunies</th><th class="n" title="Temps avant d’avoir les ressources, depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th><th class="c">Fait</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
     </section>
     <section class="carte" style="max-width:520px"><h2>Or, par fonction</h2><div id="rOrDetail"></div></section>
     <div id="rAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -444,7 +444,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
       <section class="carte">
         <h2>Déroulé détaillé</h2>
         <div class="aide">Chaque niveau dans l’ordre où il est lancé. En italique : ce que le moteur a ajouté (prérequis, dépôt, silo).</div>
-        <div class="defile"><table><thead><tr><th class="n">Date</th><th class="n">Ligne</th><th>Action</th><th class="n">Coût</th><th class="n" title="Temps écoulé depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
+        <div class="defile"><table><thead><tr><th class="n">Date</th><th class="n">Ligne</th><th>Action</th><th class="n">Coût</th><th class="n" title="Heure où les ressources de l’action sont disponibles">Ressources réunies</th><th class="n" title="Temps avant d’avoir les ressources, depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
       </section>
       <section class="carte" style="max-width:640px"><h2>À la fin de la stratégie</h2><div id="sBilan"></div></section>
     </div>
@@ -1027,7 +1027,7 @@ var Moteur = (function () {
         var monter = function (d) { if (champ) s.champs[cle].n += d; else if (copie >= 0) s.copies[copie].n += d; else s.bat[cle] += d; invalider(s); };
         var p0 = production(s), pop0 = p0.pop, pcj0 = p0.pcJour;
         monter(1); var p1 = production(s), gain = { pop: p1.pop - pop0, pcj: p1.pcJour - pcj0 }; monter(-1);
-        journaliser(s, { t: s.t, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0,
+        journaliser(s, { t: s.t, res: s.tRessources, type: champ ? 'champ' : 'batiment', label: lab + (instant ? ' · terminer maintenant' : ''), cout: cout, duree: duree, debut: debut, fin: instant ? s.t : fin, or: instant ? 2 : 0,
           cible: champ ? { i: cle } : { gid: gid, c: copie }, niveau: n }, gain);
       }
       if (s.e.or.avecOr && s.e.or.fin === 'lot2' && s.lanes.length >= 2 && s.lanes.every(function (l) { return l.champ || l.cle !== 25; })) {
@@ -1052,7 +1052,7 @@ var Moteur = (function () {
       var dF = niv(24, s.bat[24]).effets.smallPartyTime / Math.floor(s.v / 3 + 1);
       s.feteFin = s.t + dF;
       s.fetes++;
-      if (s.journal) journaliser(s, { t: s.t, type: 'fete', label: 'Petite fête n° ' + s.fetes, cout: cout, duree: dF, fin: s.feteFin, gain: '+' + gain + ' PC au lancement' });
+      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'fete', label: 'Petite fête n° ' + s.fetes, cout: cout, duree: dF, fin: s.feteFin, gain: '+' + gain + ' PC au lancement' });
       encaisserTaches(s);
       return true;
     }
@@ -1072,7 +1072,7 @@ var Moteur = (function () {
       s.form.forEach(function (f) { if (f.bat === batForm) debutT = Math.max(debutT, f.fin); });
       var finT = debutT + u.tempsSec * fact / s.v * a.n;
       s.form.push({ fin: finT, u: a.u, n: a.n, bat: batForm });
-      if (s.journal) journaliser(s, { t: s.t, type: 'troupe', label: libelle(s, a), u: a.u, n: a.n, cout: cout, duree: finT - s.t, fin: finT, gain: estPillard(u) && s.butinParCapacite > 0 ? '+' + Math.round(u.butin * s.butinParCapacite * a.n) + ' de butin par heure' : '' });
+      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'troupe', label: libelle(s, a), u: a.u, n: a.n, cout: cout, duree: finT - s.t, fin: finT, gain: estPillard(u) && s.butinParCapacite > 0 ? '+' + Math.round(u.butin * s.butinParCapacite * a.n) + ' de butin par heure' : '' });
       return true;
     }
     if (a.k === 'colon') {
@@ -1085,7 +1085,7 @@ var Moteur = (function () {
       if (!attendreRessources(s, uc.cout, limite)) return false;
       payer(s, uc.cout, 'troupes');
       var dc = uc.tempsSec * niv(25, s.bat[25]).effets.trainingTimeResidence / s.v;
-      if (s.journal) journaliser(s, { t: s.t, type: 'colon', label: libelle(s, a), cout: uc.cout, duree: dc, fin: s.t + dc });
+      if (s.journal) journaliser(s, { t: s.t, res: s.tRessources, type: 'colon', label: libelle(s, a), cout: uc.cout, duree: dc, fin: s.t + dc });
       s.colonFin = s.t + dc;
       return true;
     }
@@ -1171,9 +1171,10 @@ var Moteur = (function () {
           continue;
         }
         if (!attendreRessources(s, [750, 750, 750, 750], HORIZON)) return Infinity;
+        var tRes750 = s.t;
         if (s.pc < besoinPC - 1e-6) continue;
         payer(s, [750, 750, 750, 750], 'depart');
-        if (s.journal) journaliser(s, { t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
+        if (s.journal) journaliser(s, { t: s.t, res: tRes750, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
         return s.t;
       }
       if (action.k === 'bat' && !prerequisOk(s, action.gid)) {
@@ -1804,7 +1805,7 @@ var Moteur = (function () {
     s.tRessources = s.t;
     lance(s, suivi);
     payer(s, [750, 750, 750, 750], 'depart');
-    journaliser(s, { t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
+    journaliser(s, { t: s.t, res: s.tRessources, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
     return null;
   }
 
@@ -2326,7 +2327,8 @@ if (typeof module !== 'undefined') module.exports = Moteur;
         (opt.ligne ? '<td class="n">' + (j.ligne !== undefined ? j.ligne + 1 : '') + '</td>' : '') +
         '<td>' + libelle + '</td>' +
         '<td class="n">' + (paye ? fmt(j.cout[0] + j.cout[1] + j.cout[2] + j.cout[3]) : '') + '</td>' +
-        '<td class="n">' + (paye ? duree(j.t - dernier) : '') + '</td>' +
+        '<td class="n">' + (paye && j.res != null ? fmtDate(base + j.res * 1000) : '') + '</td>' +
+        '<td class="n">' + (paye ? duree((j.res != null ? j.res : j.t) - dernier) : '') + '</td>' +
         '<td class="c">' + (paye ? pastille(pnj, 'Oui', 'Non', 'pnj') : '') + '</td>' +
         '<td class="n">' + (j.pop != null && paye ? fmt(j.pop) : '') + '</td><td class="n">' + (j.pcj != null && paye ? fmt(j.pcj) : '') + '</td>' +
         '<td class="n">' + (j.pc != null && (paye || j.type === 'fete') ? fmt(Math.floor(j.pc)) : '') + '</td>' +
