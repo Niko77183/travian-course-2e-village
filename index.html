@@ -1487,7 +1487,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (!r || !r.meilleur || !isFinite(r.meilleur.T)) {
       $('sansResultat').style.display = ''; $('avecResultat').style.display = 'none';
       $('sansResultat').className = 'msg err';
-      $('sansResultat').textContent = 'Aucun plan ne permet de faire partir les colons dans les 30 jours avec ces données. Vérifiez les saisies (production, PC, hôtel de ville, Résidence).';
+      $('sansResultat').textContent = 'Aucun plan ne permet de faire partir les colons dans les 180 jours avec ces données. Vérifiez les saisies (production, PC cumulés, bâtiments).';
       return;
     }
     $('sansResultat').style.display = 'none'; $('avecResultat').style.display = 'flex';
