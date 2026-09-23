@@ -314,7 +314,8 @@ td.n{font-family:Consolas,monospace;white-space:nowrap}
 var Moteur = (function () {
   'use strict';
 
-  var H = 3600, J = 86400, HORIZON = 30 * J;
+  // horizon large : un plan lent n'est pas « impossible », il est classé (un village neuf ne produit que quelques PC par jour)
+  var H = 3600, J = 86400, HORIZON = 180 * J;
   var MURS = { romains: 31, germains: 32, gaulois: 33, egyptiens: 42, huns: 43, spartiates: 47, vikings: 50 };
   // Bâtiments jamais proposés : décisions de l'utilisateur (Résidence seule, pas de grande fête) ou sans intérêt avant la fondation
   var EXCLUS = { 26: 1, 27: 1, 28: 1, 29: 1, 30: 1, 35: 1, 38: 1, 39: 1, 40: 1, 41: 1, 44: 1, 45: 1, 46: 1, 48: 1, 49: 1 };
@@ -517,7 +518,7 @@ var Moteur = (function () {
         while (s.rang[i] < tc.paliers.length && valeurTache(s, tc) >= tc.paliers[s.rang[i]].palier) {
           var p = tc.paliers[s.rang[i]];
           // base × (1 + 2 % × (niveau − 1)), en calcul entier pour éviter 1 709,999… au lieu de 1 710
-          var pour100 = 98 + 2 * s.heros.niv;
+          var pour100 = 100 + 2 * Math.max(0, s.heros.niv - 1); // héros niveau 0 ou 1 : pas de bonus
           var res = Math.floor(p.baseRessources * pour100 / 100), xp = Math.floor(p.baseXP * pour100 / 100);
           ajouterRessources(s, [res, res, res, res]);
           s.rang[i]++;
@@ -838,48 +839,73 @@ var Moteur = (function () {
   }
 
   // ---------- fin de partie : ce qu'il reste d'obligatoire ----------
-  // Résidence 10 (et ses prérequis), petites fêtes tant que les PC manquent, 3 colons, puis départ.
+  // Résidence 10, hôtel de ville si les PC ne viendront pas seuls, petites fêtes tant que les PC manquent,
+  // 3 colons, puis départ. Chaque bâtiment visé est atteint en remontant ses prérequis
+  // (hôtel de ville → Bâtiment principal 10 + Académie 10 → Caserne 3…), et le dépôt ou le silo
+  // est agrandi quand un coût les dépasse.
   // variante 0 : fêtes en priorité ; variante 1 : Résidence en priorité.
+  var ATTENTE = { k: 'attente' };
+  // prochaine action pour avoir gid au niveau lvl ; null si déjà atteint ou en file ; ATTENTE si un prérequis est en chantier
+  function versBatiment(s, gid, lvl) {
+    if (s.bat[gid] + enFile(s, gid) >= lvl) return null;
+    var b = BAT[gid];
+    for (var i = 0; i < b.prerequis.length; i++) {
+      var p = b.prerequis[i];
+      if (p.type !== 'Building') continue;
+      var ok = false, g0 = p.gid[0];
+      for (var j = 0; j < p.gid.length; j++) if (s.bat[p.gid[j]] >= p.level) ok = true;
+      if (ok) continue;
+      if (s.bat[g0] + enFile(s, g0) >= p.level) return ATTENTE;
+      return versBatiment(s, g0, p.level);
+    }
+    if (!prerequisOk(s, gid)) return null; // interdit (Palais, autre peuple…)
+    var n = s.bat[gid] + enFile(s, gid) + 1;
+    return pourCout(s, niv(gid, n).cout) || { k: 'bat', gid: gid };
+  }
+  // dépôt ou silo à agrandir pour pouvoir payer ce coût ; null si la place suffit
+  function pourCout(s, cout) {
+    var cap = production(s).cap, r;
+    for (r = 0; r < 3; r++) if (cout[r] > cap[r] + s.reserve[r]) return etageStockage(s, 10, 'storageWarehouse', Math.max(cout[0], cout[1], cout[2]));
+    if (cout[3] > cap[3] + s.reserve[3]) return etageStockage(s, 11, 'storageGranary', cout[3]);
+    return null;
+  }
+  function etageStockage(s, gid, cle, besoin) {
+    var n = s.bat[gid] + enFile(s, gid);
+    if (n >= BAT[gid].niveauMax) return null;
+    for (var k = n + 1; k <= BAT[gid].niveauMax; k++) if (niv(gid, k).effets[cle] >= besoin) return versBatiment(s, gid, k) || ATTENTE;
+    return versBatiment(s, gid, BAT[gid].niveauMax) || ATTENTE;
+  }
+  function prochaineFinChantier(s) { return Math.min.apply(null, s.lanes.map(function (l) { return l.fin; })); }
+
   function finir(s, variante) {
     var besoinPC = D.pcRequis, guard = 0;
-    while (guard++ < 200) {
+    while (guard++ < 600) {
       if (s.t > HORIZON) return Infinity;
       var pcOk = s.pc >= besoinPC - 1e-6;
-      // une fête n'est utile que si, même au départ le plus tôt possible, les PC manqueraient
-      var pjF = production(s).pcJour;
-      var feteUtile = !pcOk && s.bat[24] >= 1 && s.pc + pjF * Math.max(0, borne(s) - s.t) / J < besoinPC;
-      var resVise = niveauVise(s, false, 25);
-      var action = null;
-      var feteLibre = s.feteFin <= s.t;
-      if (feteUtile && feteLibre && variante === 0) action = { k: 'fete' };
-      else if (resVise <= 10 && s.bat[25] + enFile(s, 25) < 10) {
-        if (s.bat[15] < 5 && niveauVise(s, false, 15) <= 5 && s.bat[25] === 0) action = { k: 'bat', gid: 15 };
-        else action = { k: 'bat', gid: 25 };
-        var c = niv(25, Math.min(10, resVise)).cout, cap = production(s).cap;
-        if (c[0] > cap[0] + s.reserve[0] || c[1] > cap[1] + s.reserve[1] || c[2] > cap[2] + s.reserve[2]) action = { k: 'bat', gid: 10 };
-        else if (c[3] > cap[3] + s.reserve[3]) action = { k: 'bat', gid: 11 };
-        if (feteUtile && feteLibre && variante === 1 && !placeLibre(s, false)) action = { k: 'fete' };
+      var pj = production(s).pcJour;
+      // PC encore manquants au départ le plus tôt possible : il faudra des fêtes
+      var pcCourts = !pcOk && s.pc + pj * Math.max(0, borne(s) - s.t) / J < besoinPC;
+      var fete = null, hdv = null, res = null, colon = null;
+      if (pcCourts && s.bat[24] >= 1 && s.feteFin <= s.t) fete = pourCout(s, D.fete.cout) || { k: 'fete' };
+      if (pcCourts && s.bat[24] + enFile(s, 24) < 1) hdv = versBatiment(s, 24, 1);
+      if (s.bat[25] + enFile(s, 25) < 10) res = versBatiment(s, 25, 10);
+      if (s.bat[25] >= 10 && s.colonsFaits + (s.colonFin >= 0 ? 1 : 0) < 3) colon = pourCout(s, D.troupes[s.tribu].unites[9].cout) || { k: 'colon' };
+      var ordre = variante === 0 ? [fete, hdv, res, colon] : [res, colon, hdv, fete];
+      // variante 1 : une fête passe quand même si aucune place de chantier n'est libre
+      if (variante === 1 && fete && !placeLibre(s, false)) ordre.unshift(fete);
+      var action = null, attente = false;
+      for (var i = 0; i < ordre.length && !action; i++) {
+        if (ordre[i] === ATTENTE) attente = true;
+        else if (ordre[i]) action = ordre[i];
       }
-      else if (s.bat[25] + enFile(s, 25) >= 10 && s.bat[25] < 10) {
-        // Résidence 10 en cours : fête si utile, sinon attendre la fin du chantier
-        if (feteUtile && feteLibre) action = { k: 'fete' };
-        else { avancerJusqua(s, Math.min.apply(null, s.lanes.map(function (l) { return l.fin; }))); continue; }
-      }
-      else if (s.colonsFaits + (s.colonFin >= 0 ? 1 : 0) < 3) {
-        var capC = production(s).cap, cc = D.troupes[s.tribu].unites[9].cout;
-        if (cc[0] > capC[0] || cc[1] > capC[1] || cc[2] > capC[2]) action = { k: 'bat', gid: 10 };
-        else if (cc[3] > capC[3]) action = { k: 'bat', gid: 11 };
-        else if (feteUtile && feteLibre && variante === 0) action = { k: 'fete' };
-        else action = { k: 'colon' };
-      }
-      else if (feteUtile && feteLibre) action = { k: 'fete' };
-      else {
+      if (!action) {
+        if ((attente || s.bat[25] < 10) && s.lanes.length) { avancerJusqua(s, prochaineFinChantier(s)); continue; }
         // attendre colons, PC et 750 de chaque
         if (s.colonFin >= 0) { avancerJusqua(s, s.colonFin); continue; }
+        if (s.bat[25] < 10) return Infinity;
         if (!pcOk) {
-          var pj = production(s).pcJour;
           var tPC = pj > 0 ? s.t + (besoinPC - s.pc) / pj * J : Infinity;
-          var cible = feteUtile ? Math.min(tPC, s.feteFin) : tPC;
+          var cible = s.bat[24] >= 1 && s.feteFin > s.t ? Math.min(tPC, s.feteFin) : tPC;
           if (!isFinite(cible) || cible > HORIZON) return Infinity;
           avancerJusqua(s, Math.max(cible, s.t + 1));
           continue;
@@ -890,9 +916,9 @@ var Moteur = (function () {
         if (s.journal) s.journal.push({ t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
         return s.t;
       }
-      if (action.k === 'bat' && !prerequisOk(s, action.gid) && s.lanes.length) {
-        avancerJusqua(s, Math.min.apply(null, s.lanes.map(function (l) { return l.fin; })));
-        continue;
+      if (action.k === 'bat' && !prerequisOk(s, action.gid)) {
+        if (s.lanes.length) { avancerJusqua(s, prochaineFinChantier(s)); continue; }
+        return Infinity;
       }
       if (!executer(s, action, HORIZON)) return Infinity;
     }
@@ -993,7 +1019,8 @@ var Moteur = (function () {
       var noeud0 = { s: racine, actions: [], T: ev.T, v: ev.variante, fin: ev.fin };
       noter(noeud0, mode);
       var faisceau = [noeud0], sansProgres = 0, meilleurT = ev.T;
-      for (var prof = 0; prof < 70 && faisceau.length && sansProgres < 8; prof++) {
+      // un village neuf demande des centaines d'actions : on s'arrête quand 12 étapes de suite n'apportent plus rien
+      for (var prof = 0; prof < 400 && faisceau.length && sansProgres < 12; prof++) {
         var enfants = [], vus = {};
         for (var i = 0; i < faisceau.length; i++) {
           var nd = faisceau[i];
