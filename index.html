@@ -376,7 +376,7 @@ tr.auto td{color:var(--doux);font-style:italic}
   <div style="display:flex;flex-direction:column;gap:24px">
     <section class="carte">
       <h2>Ma stratégie</h2>
-      <div class="aide">Listez vous-même ce que vous voulez faire, dans l’ordre. Le moteur le joue au plus tôt, avec vos saisies des onglets 1 à 3 (village, production, héros, or) et les mêmes règles que ses propres plans : ressources payées au lancement, file de chantiers, dépôt et silo, 20 emplacements. Chaque ligne attend que la précédente soit lancée. Délais et faisabilité se recalculent à chaque modification.</div>
+      <div class="aide">Listez vous-même ce que vous voulez faire, dans l’ordre. Le moteur le joue au plus tôt, avec vos saisies des onglets 1 à 3 (village, production, héros, or) et les mêmes règles que ses propres plans : ressources payées au lancement, file de chantiers, dépôt et silo, 20 emplacements. Chaque ligne attend que la précédente soit lancée. Délais et faisabilité se recalculent à chaque modification.<br><b>Ressources réunies</b> : l’heure où l’on peut payer la ligne. <b>Lancement</b> : l’heure où elle part vraiment, c’est-à-dire la plus tardive entre les ressources réunies et les autres conditions (fête en cours, colon en formation, file de chantiers pleine, prérequis en construction, ligne précédente) ; la cause est écrite en dessous. <b>Fin</b> : fin du chantier, de la fête ou de la formation.</div>
       <div class="ajout">
         <select id="sType" aria-label="Type de ligne à ajouter">
           <option value="champ">Champs</option><option value="bat">Bâtiment</option><option value="nouveau">Nouvel exemplaire (cachette…)</option>
@@ -388,7 +388,7 @@ tr.auto td{color:var(--doux);font-style:italic}
       </div>
       <label style="display:flex;gap:10px;align-items:center;font-size:14px">Héros pendant la stratégie <select id="sHeros"><option value="production">en production</option><option value="combat">en combat (pille)</option></select></label>
       <label style="display:flex;gap:10px;align-items:center;font-size:14px"><input type="checkbox" id="sAuto" checked> Construire d’abord les prérequis manquants, et agrandir le dépôt ou le silo quand un coût les dépasse (lignes ajoutées en italique)</label>
-      <div class="defile"><table class="strat"><thead><tr><th>#</th><th>Action</th><th>Au départ</th><th>Niveau visé ou nombre</th><th>Lancement</th><th>Fin</th><th>Coût total</th><th title="Valeurs du village une fois terminés tous les chantiers lancés jusqu’à cette ligne">Population · PC/jour<br><span class="aide">chantiers lancés finis</span></th><th>PC cumulés</th><th>Faisable ?</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
+      <div class="defile"><table class="strat"><thead><tr><th>#</th><th>Action</th><th>Au départ</th><th>Niveau visé ou nombre</th><th title="Heure où les ressources de la ligne sont disponibles : production, récompenses, inventaire du héros, marchand PNJ si l’option est cochée">Ressources réunies</th><th title="Heure où la ligne part dans le jeu, et ce qui fixe cette heure">Lancement<br><span class="aide">et ce qui le fixe</span></th><th>Fin</th><th>Coût total</th><th title="Valeurs du village une fois terminés tous les chantiers lancés jusqu’à cette ligne">Population · PC/jour<br><span class="aide">chantiers lancés finis</span></th><th>PC cumulés</th><th>Faisable ?</th><th></th></tr></thead><tbody id="sLignes"></tbody></table></div>
       <div id="sVide" class="aide">Aucune ligne pour l’instant : ajoutez-en, ou partez du plan retenu par le moteur (onglet 4) pour le retoucher.</div>
     </section>
     <div id="sResultat" style="display:none;flex-direction:column;gap:24px">
@@ -826,6 +826,12 @@ var Moteur = (function () {
       if (poste) s.depense[poste][r] += cout[r];
     }
     invalider(s);
+    // le héros avait été tourné vers la ressource qui manquait : une fois payé, il revient à toutes les ressources
+    // (meilleur total), sinon il continue de remplir un dépôt plein pendant les attentes suivantes (constaté le 23/09/2026)
+    if (poste && s.e.heros.auto !== false && s.heros.pts > 0 && s.heros.type !== 'tout') {
+      s.heros.type = 'tout'; invalider(s);
+      if (s.journal) journaliser(s, { t: s.t, type: 'heros', label: 'Héros : produire toutes les ressources', gain: 'dépense payée' });
+    }
   }
   // temps (en secondes) pour réunir ce coût avec la production actuelle
   function tempsPour(s, cout) {
@@ -872,6 +878,12 @@ var Moteur = (function () {
       for (r = 0; r < 4; r++) if (dispo(s, r) < cout[r]) {
         if (p.net[r] <= 0) { tr = Infinity; break; }
         tr = Math.max(tr, s.t + (cout[r] - dispo(s, r)) / p.net[r] * H);
+      }
+      // marchand PNJ : il suffit que le total soit réuni (sans compter ce qui déborderait du dépôt ou du silo)
+      if (s.e.or.avecOr && s.e.or.pnj) {
+        var tot2 = 0, besoin2 = 0, net2 = 0;
+        for (r = 0; r < 4; r++) { tot2 += dispo(s, r); besoin2 += cout[r]; if (s.stock[r] < p.cap[r] - 1e-6) net2 += Math.max(0, p.net[r]); }
+        if (net2 > 0) tr = Math.min(tr, s.t + Math.max(1, (besoin2 - tot2) / net2 * H));
       }
       var te = prochainEvenement(s);
       var cible = Math.min(tr, te);
@@ -1550,7 +1562,17 @@ var Moteur = (function () {
     }
     return { r: pire, t: tmax };
   }
-  function jouerAction(s, a, auto, marquer, attentes) {
+  // heure où les ressources de la 1re action d'une ligne sont réunies (production, récompenses, inventaire du héros,
+  // marchand PNJ si l'option est cochée), calculée sur une copie de l'état : indépendante de la fête en cours, de la file…
+  function noter(s, cout, suivi, autre) {
+    if (!suivi || suivi.note) return;
+    suivi.note = true; suivi.tN = s.t; suivi.autre = autre;
+    var c = cloner(s), pnj0 = c.or.pnj;
+    var ok = attendreRessources(c, cout, HORIZON);
+    suivi.tRes = ok ? c.t : null; suivi.pnjRes = ok && c.or.pnj > pnj0;
+  }
+  function lance(s, suivi) { if (suivi && suivi.lance === undefined) suivi.lance = s.t; }
+  function jouerAction(s, a, auto, marquer, attentes, suivi) {
     for (var garde = 0; garde < 200; garde++) {
       if (s.t > HORIZON) return 'au-delà de 180 jours';
       var raison = interdit(s, a, auto);
@@ -1575,7 +1597,9 @@ var Moteur = (function () {
           return 'prérequis manquant : ' + BAT[pre.gid].nom + ' (voir l’option de construction automatique)';
         }
         var k0 = s.journal.length;
+        noter(s, coutAction(s, pre), suivi, !placeLibre(s, false) ? { motif: 'la file de chantiers' } : null);
         if (!executer(s, pre, HORIZON)) return BAT[pre.gid].nom + ' (ajouté) : ' + raisonAttente(s, coutAction(s, pre));
+        lance(s, suivi);
         marquer(k0);
         continue;
       }
@@ -1585,7 +1609,9 @@ var Moteur = (function () {
       else if (a.k === 'colon' && s.colonFin >= 0) autre = { motif: 'le colon en formation', t: s.colonFin - s.t };
       else if ((a.k === 'champ' || a.k === 'bat' || a.k === 'copie') && !placeLibre(s, a.k === 'champ')) autre = { motif: 'la file de chantiers', t: prochaineFinChantier(s) - s.t };
       var t0 = s.t;
+      noter(s, coutAction(s, a), suivi, autre);
       if (executer(s, a, HORIZON)) {
+        lance(s, suivi);
         // attente réelle, attribuée à la fête, au colon ou à la file si le lancement tombe à leur fin, sinon à la ressource la plus lente
         var reel = s.t - t0;
         if (attentes && reel > 60) {
@@ -1598,6 +1624,15 @@ var Moteur = (function () {
     }
     return 'trop d’étapes';
   }
+  // ce qui a fixé l'heure de lancement de la ligne
+  function causeLancement(su, debutLigne) {
+    if (su.lance === undefined) return null;
+    if (su.autre && su.autre.motif && (su.tRes === null || su.lance - su.tRes > 60)) return su.autre.motif;
+    if (su.tRes !== null && su.tRes - su.tN > 60) return su.pnjRes ? 'les ressources (avec le marchand PNJ)' : 'les ressources';
+    if (su.tN - debutLigne > 60) return 'un prérequis en construction';
+    if (su.autre && su.autre.motif) return su.autre.motif;
+    return 'la ligne précédente (tout était prêt)';
+  }
   function plusLong(o) { var m = null; Object.keys(o).forEach(function (k) { if (o[k] > 60 && (m === null || o[k] > o[m])) m = k; }); return m; }
   function strategie(entree, lignes, opt) {
     opt = opt || {};
@@ -1608,8 +1643,8 @@ var Moteur = (function () {
     var marquer = function (k) { for (var q = k; q < s.journal.length; q++) if (s.journal[q].type === 'champ' || s.journal[q].type === 'batiment') s.journal[q].auto = true; };
     lignes.forEach(function (l, idx) {
       var k0 = s.journal.length, t0 = s.t, raison = null, faits = 0;
-      var attentes = {};
-      var etape = function (a) { var r = jouerAction(s, a, opt.auto !== false, marquer, attentes); if (!r) faits++; return r; };
+      var attentes = {}, suivi = {};
+      var etape = function (a) { var r = jouerAction(s, a, opt.auto !== false, marquer, attentes, suivi); if (!r) faits++; return r; };
       if (l.t === 'bat') {
         var gid = +l.gid, c = l.c === 'nouveau' ? 'nouveau' : +l.c;
         if (!BAT[gid]) raison = 'bâtiment inconnu';
@@ -1653,7 +1688,7 @@ var Moteur = (function () {
           avancerJusqua(s, fw); faits++;
         }
       } else if (l.t === 'depart') {
-        raison = depart(s);
+        raison = depart(s, suivi);
         if (!raison) faits++;
       } else raison = 'ligne inconnue';
       // bornes de la ligne : lancement de sa première action, fin de la dernière
@@ -1671,7 +1706,8 @@ var Moteur = (function () {
       // (mêmes conventions que le planning du moteur automatique)
       res.push({ ok: !raison, raison: raison, faits: faits, debut: debut, fin: fin, cout: cout, attente: debut !== null ? debut - t0 : null,
         pop: etat ? etat.pop : null, pcj: etat ? etat.pcj : null, pc: etat ? etat.pc : null, stock: etat ? etat.stock : null,
-        attentes: attentes, goulot: plusLong(attentes), pnj: pnj });
+        attentes: attentes, goulot: plusLong(attentes), pnj: pnj,
+        ressources: suivi.tRes !== undefined ? suivi.tRes : null, pnjRessources: !!suivi.pnjRes, cause: causeLancement(suivi, t0) });
     });
     // tout ce qui est lancé se termine
     var tFin = s.t;
@@ -1689,15 +1725,19 @@ var Moteur = (function () {
     };
   }
   // départ des colons : 3 colons formés, PC suffisants, 750 de chaque
-  function depart(s) {
-    if (s.colonFin >= 0) avancerJusqua(s, s.colonFin);
+  function depart(s, suivi) {
+    var t0 = s.t, motif = null;
+    if (s.colonFin >= 0) { if (s.colonFin > s.t + 60) motif = 'le dernier colon en formation'; avancerJusqua(s, s.colonFin); }
     if (s.colonsFaits < 3) return 'il faut d’abord former 3 colons (' + s.colonsFaits + ' formé' + (s.colonsFaits > 1 ? 's' : '') + ')';
     if (s.pc < D.pcRequis - 1e-6) {
       var pj = production(s).pcJour, t = pj > 0 ? s.t + (D.pcRequis - s.pc) / pj * J : Infinity;
       if (!(t <= HORIZON)) return 'PC insuffisants : ' + Math.ceil(D.pcRequis - s.pc) + ' manquants, trop lents à venir (ajoutez des fêtes)';
+      if (t > s.t + 60) motif = 'les PC (' + D.pcRequis + ' requis)';
       avancerJusqua(s, t);
     }
+    if (suivi) { suivi.tN = t0; suivi.note = true; suivi.autre = motif ? { motif: motif } : null; var c = cloner(s); suivi.tRes = attendreRessources(c, [750, 750, 750, 750], HORIZON) ? c.t : null; }
     if (!attendreRessources(s, [750, 750, 750, 750], HORIZON)) return raisonAttente(s, [750, 750, 750, 750]);
+    lance(s, suivi);
     payer(s, [750, 750, 750, 750], 'depart');
     journaliser(s, { t: s.t, type: 'depart', label: 'Départ des 3 colons', cout: [750, 750, 750, 750], gain: Math.floor(s.pc) + ' PC' });
     return null;
@@ -2295,7 +2335,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     $('sLignes').innerHTML = strat.map(function (l, k) {
       var champ = l.t === 'depart' ? '' : '<input type="number" min="1" max="' + maxLigne(l) + '" value="' + (l.t === 'champ' || l.t === 'bat' ? l.niveau : l.n) + '" data-k="' + (l.t === 'champ' || l.t === 'bat' ? 'niveau' : 'n') + '" aria-label="' + (l.t === 'champ' || l.t === 'bat' ? 'Niveau visé' : 'Nombre') + ', ligne ' + (k + 1) + '">';
       return '<tr data-l="' + k + '"><td class="n">' + (k + 1) + '</td><td>' + optionsLigne(l, k) + '</td><td class="aide">' + auDepart(l, k) + '</td><td>' + champ + '</td>' +
-        '<td class="n" data-c="debut"></td><td class="n" data-c="fin"></td><td class="n" data-c="cout"></td><td class="n" data-c="pop"></td><td class="n" data-c="pc"></td><td data-c="etat"></td>' +
+        '<td class="n" data-c="res"></td><td class="n" data-c="debut"></td><td class="n" data-c="fin"></td><td class="n" data-c="cout"></td><td class="n" data-c="pop"></td><td class="n" data-c="pc"></td><td data-c="etat"></td>' +
         '<td><div class="ordre"><button type="button" data-act="haut" aria-label="Monter la ligne ' + (k + 1) + '">▲</button><button type="button" data-act="bas" aria-label="Descendre la ligne ' + (k + 1) + '">▼</button><button type="button" class="retirer" data-act="suppr" aria-label="Supprimer la ligne ' + (k + 1) + '">×</button></div></td></tr>';
     }).join('');
   }
@@ -2316,13 +2356,13 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     document.querySelectorAll('#sLignes tr').forEach(function (tr) {
       var x = r.lignes[+tr.dataset.l]; if (!x) return;
       tr.classList.toggle('ko', !x.ok);
-      tr.querySelector('[data-c=debut]').innerHTML = quand(x.debut);
+      tr.querySelector('[data-c=res]').innerHTML = x.ok || x.ressources !== null ? quand(x.ressources) + (x.pnjRessources ? '<br><span class="aide">avec marchand PNJ</span>' : '') : '—';
+      tr.querySelector('[data-c=debut]').innerHTML = quand(x.debut) + (x.cause ? '<br><span class="aide">fixé par ' + esc(x.cause) + '</span>' : '');
       tr.querySelector('[data-c=fin]').innerHTML = quand(x.fin);
       tr.querySelector('[data-c=cout]').textContent = som(x.cout) ? fmt(som(x.cout)) : '';
       tr.querySelector('[data-c=pop]').textContent = x.pop != null ? fmt(x.pop) + ' · ' + fmt(x.pcj) : '';
       tr.querySelector('[data-c=pc]').textContent = x.pc != null ? fmt(Math.floor(x.pc)) : '';
-      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.attente > 3600 ? '<br><span class="aide">attente ' + fmtServ(x.attente) + (x.goulot ? ', surtout ' + ({ bois: 'le bois', argile: 'l’argile', fer: 'le fer', 'céréales': 'les céréales' }[x.goulot] || x.goulot) : '') + '</span>' : '') +
-          (x.pnj ? '<br><span class="aide">marchand PNJ ×' + x.pnj + ' (' + 3 * x.pnj + ' or)</span>' : '')
+      tr.querySelector('[data-c=etat]').innerHTML = x.ok ? '<span class="etat-ok">Oui</span>' + (x.pnj ? '<br><span class="aide">marchand PNJ ×' + x.pnj + ' (' + 3 * x.pnj + ' or)</span>' : '')
         : '<span class="etat-ko">Non</span><br><span class="aide">' + esc(x.raison) + '</span>';
     });
     $('sResultat').style.display = 'flex';
