@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="1790195698573">
+<meta name="version" content="1790233488710">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +132,7 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+.mort{display:grid;grid-template-columns:minmax(0,1fr) 90px 90px;gap:12px;align-items:end;padding:12px 14px;border:1px solid var(--trait);border-radius:12px;font-size:14px}
 .defile.eclair{animation:eclair .9s ease-out}
 @keyframes eclair{from{box-shadow:0 0 0 3px rgba(47,93,58,.35)}to{box-shadow:0 0 0 3px rgba(47,93,58,0)}}
 #sMaj{color:var(--vert2);font-weight:500;min-height:18px}
@@ -306,6 +307,11 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
           <label class="champ">Points en force<input type="number" id="hForce" min="0" value="0"></label>
           <label class="champ">Points en production<input type="number" id="hProd" min="0" value="0"></label>
           <label class="champ">Production<select id="hType"><option value="tout">Toutes ressources</option><option value="0">Bois</option><option value="1">Argile</option><option value="2">Fer</option><option value="3">Céréales</option></select></label>
+        </div>
+        <div class="mort">
+          <span><b>Héros mort</b><br><span class="aide">Réanimation dans (à compter de l’heure du collage). 0 = héros vivant.</span></span>
+          <label class="champ">Heures<input type="number" id="hMortH" min="0" value="0"></label>
+          <label class="champ">Minutes<input type="number" id="hMortM" min="0" max="59" value="0"></label>
         </div>
         <label style="display:flex;gap:10px;align-items:center;font-size:14px"><input type="checkbox" id="hAuto" checked>Le moteur choisit ce que produit le héros pendant les attentes (toutes ressources, ou seulement celle qui manque)</label>
         <fieldset style="border:0;margin:0;padding:0">
@@ -513,6 +519,7 @@ var Moteur = (function () {
       bat: new Int16Array(51),
       pc: e.pc || 0,
       feteFin: e.feteFinDans != null ? e.feteFinDans : -1,
+      herosMortFin: e.herosMortDans > 0 ? e.herosMortDans : 0, // héros mort : réanimé à cette heure (0 = vivant)
       fetes: 0,
       lanes: [], // constructions : {fin, debut, champ, cle, label}
       form: [], // formations de troupes : {fin, u, n}
@@ -569,7 +576,7 @@ var Moteur = (function () {
       colonsFaits: s.colonsFaits, colonFin: s.colonFin,
       heros: { niv: s.heros.niv, xp: s.heros.xp, pts: s.heros.pts, type: s.heros.type, mode: s.heros.mode },
       troupes: s.troupes.slice(), butinHeros: s.butinHeros, butinParCapacite: s.butinParCapacite, butinFixe: s.butinFixe,
-      bonusTemp: s.bonusTemp.slice(), plusTempFin: s.plusTempFin,
+      bonusTemp: s.bonusTemp.slice(), plusTempFin: s.plusTempFin, herosMortFin: s.herosMortFin,
       rang: new Int8Array(s.rang), prochainReset: s.prochainReset,
       or: { plus: s.or.plus, bonus: s.or.bonus, fin: s.or.fin, pnj: s.or.pnj, maitre: s.or.maitre },
       depense: { champs: s.depense.champs.slice(), batiments: s.depense.batiments.slice(), fetes: s.depense.fetes.slice(), troupes: s.depense.troupes.slice(), depart: s.depense.depart.slice() },
@@ -628,14 +635,17 @@ var Moteur = (function () {
     var boost = [effet(s, 5, 'productionBoost1', 0), effet(s, 6, 'productionBoost2', 0), effet(s, 7, 'productionBoost3', 0),
       effet(s, 8, 'productionBoost4', 0) + effet(s, 9, 'productionBoost4', 0)];
     var parPoint = s.tribu === 'egyptiens' ? [12, 40] : [9, 30];
-    var heros = [0, 0, 0, 6];
+    // héros mort : ni production (points et 6 céréales de base), ni entretien (6 céréales), ni butin, jusqu'à sa réanimation
+    var mort = s.herosMortFin > s.t;
+    var heros = [0, 0, 0, mort ? 0 : 6];
     for (var r = 0; r < 4; r++) {
       champs[r] = champs[r] * (1 + boost[r]) * v;
+      if (mort) continue;
       if (s.heros.type === 'tout') heros[r] += s.heros.pts * parPoint[0];
       else if (s.heros.type === r) heros[r] += s.heros.pts * parPoint[1];
       heros[r] *= v;
     }
-    var bonus = [0, 0, 0, 0], pillage = 0, conso = population(s) + 6;
+    var bonus = [0, 0, 0, 0], pillage = 0, conso = population(s) + (mort ? 0 : 6);
     for (r = 0; r < 4; r++) if (bonusActif(s, r)) bonus[r] = Math.round(0.25 * (champs[r] + heros[r]));
     var unites = D.troupes[s.tribu].unites;
     for (var i = 0; i < unites.length; i++) {
@@ -644,7 +654,7 @@ var Moteur = (function () {
     }
     conso += s.colonsFaits; // un colon consomme 1 céréale
     pillage += s.butinFixe;
-    if (s.heros.mode === 'combat') pillage += s.butinHeros;
+    if (s.heros.mode === 'combat' && !mort) pillage += s.butinHeros;
     var net = [0, 0, 0, 0];
     for (r = 0; r < 4; r++) net[r] = champs[r] + heros[r] + bonus[r] + pillage / 4;
     net[3] -= conso;
@@ -744,6 +754,7 @@ var Moteur = (function () {
     if (s.colonFin >= 0 && s.colonFin < t) t = s.colonFin;
     if (s.feteFin > s.t && s.feteFin < t) t = s.feteFin;
     for (var r = 0; r < 4; r++) if (s.bonusTemp[r] > s.t && s.bonusTemp[r] < t) t = s.bonusTemp[r];
+    if (s.herosMortFin > s.t && s.herosMortFin < t) t = s.herosMortFin;
     return t;
   }
   // fait couler le temps jusqu'à t (sans franchir d'événement : l'appelant s'en charge)
@@ -783,6 +794,10 @@ var Moteur = (function () {
     if (s.colonFin >= 0 && s.colonFin <= s.t + 1e-6) { s.colonsFaits++; s.colonFin = -1; change = true; }
     if (s.prochainReset <= s.t + 1e-6) { recompenseQuotidienne(s); s.prochainReset += J; change = true; }
     for (var r = 0; r < 4; r++) if (s.bonusTemp[r] > 0 && s.bonusTemp[r] <= s.t + 1e-6) { s.bonusTemp[r] = 0; change = true; }
+    if (s.herosMortFin > 0 && s.herosMortFin <= s.t + 1e-6) {
+      s.herosMortFin = 0; change = true;
+      if (s.journal) { invalider(s); journaliser(s, { t: s.t, type: 'heros', label: 'Héros réanimé : sa production reprend', gain: '' }); }
+    }
     if (change) {
       invalider(s);
       encaisserTaches(s);
@@ -933,7 +948,7 @@ var Moteur = (function () {
         for (r = 0; r < 4; r++) { tot += dispo(s, r); besoin += cout[r]; }
         if (tot >= besoin) { echangePNJ(s, cout); return true; }
       }
-      if (s.e.heros.auto !== false && s.heros.pts > 0) { choisirProductionHeros(s, cout); p = production(s); }
+      if (s.e.heros.auto !== false && s.heros.pts > 0 && !(s.herosMortFin > s.t)) { choisirProductionHeros(s, cout); p = production(s); }
       var tr = s.t;
       for (r = 0; r < 4; r++) if (dispo(s, r) < cout[r]) {
         if (p.net[r] <= 0) { tr = Infinity; break; }
@@ -1537,6 +1552,7 @@ var Moteur = (function () {
     }
     var alertes = [];
     if (!isFinite(T)) alertes.push('Même le meilleur plan dépasse 180 jours : vérifiez les saisies (production, PC cumulés, bâtiments).');
+    if (e.herosMortDans > 0) alertes.push('Héros mort : sa production et son butin ne sont comptés qu’après sa réanimation, dans ' + fmtDuree(e.herosMortDans) + ' (coût de la réanimation supposé déjà payé).');
     if (s.famine) alertes.push('Le silo se vide pendant le plan : des troupes risquent de mourir de faim.');
     if (e.quotidien) alertes.push('Quêtes quotidiennes : l’ordre des récompenses est supposé commencer au jour d’ouverture du serveur. Les récompenses tirées au hasard ne sont pas comptées.');
     alertes.push('Récompenses des tâches et des quêtes quotidiennes : supposées encaissées au moment où elles servent, jamais dans un dépôt plein.');
@@ -2113,6 +2129,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       heros: { niveau: +$('hNiv').value || 0, xp: +$('hXp').value || 0, pointsProd: +$('hProd').value || 0, typeProd: typeProd === 'tout' ? 'tout' : +typeProd,
         mode: document.querySelector('input[name=mode]:checked').value, auto: $('hAuto').checked },
       troupes: troupes.slice(), butinHeros: bh, butinTroupes: bt,
+      herosMortDans: Math.max(0, (+$('hMortH').value || 0) * 3600 + (+$('hMortM').value || 0) * 60),
       pc: +$('pc').value || 0, feteFinDans: ff !== null && ic !== null && ff > ic ? (ff - ic) / 1000 : null,
       quotidien: +$('quotidien').value, tachesTouchees: touchees.slice(), formerTroupes: $('oTroupes').checked, exclusions: retraits.map(function (x) { return x.cle; }),
       or: { avecOr: document.querySelector('input[name=or]:checked').value === '1', plus: $('oPlus').checked, fin: $('oFin').value, pnj: $('oPnj').checked, maitre: $('oMaitre').checked, video: $('oVideo').checked },
@@ -2583,6 +2600,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     var al = [];
     r.lignes.forEach(function (x, k) { if (!x.ok) al.push('<div class="msg err">Ligne ' + (k + 1) + ' impossible : ' + esc(x.raison) + (x.faits ? ' (' + x.faits + ' étape' + (x.faits > 1 ? 's' : '') + ' faite' + (x.faits > 1 ? 's' : '') + ' avant le blocage)' : '') + '.</div>'); });
     if (r.famine) al.push('<div class="msg att">Le silo se vide pendant la stratégie : des troupes risquent de mourir de faim.</div>');
+    if (e.herosMortDans > 0) al.push('<div class="msg att">Héros mort : sa production (et son butin) ne comptent qu’à partir de sa réanimation, le ' + fmtDate(base + e.herosMortDans * 1000) + '.</div>');
     if (strat.some(function (l) { return l.t === 'troupe'; })) al.push('<div class="msg att">Troupes : la recherche de l’unité à l’Académie est supposée déjà faite.</div>');
     if (!al.length) al.push('<div class="msg ok">Toutes les lignes sont faisables.</div>');
     $('sAlertes').innerHTML = al.join('');
