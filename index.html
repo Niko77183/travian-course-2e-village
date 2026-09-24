@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="1790266936643">
+<meta name="version" content="1790269848065">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +132,37 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+#dlgCompte{max-width:460px}
+#dlgSims{max-width:720px}
+.bloc-sims{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:1px solid var(--trait);border-radius:12px}
+.bloc-tete{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.bloc-tete h3{margin:0;font-size:15px;font-weight:600}
+.actions-sims{display:flex;gap:8px;flex-wrap:wrap}
+.actions-sims .bouton{padding:8px 14px;font-size:14px}
+.invite-compte{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:14px}
+.invite-compte .bouton{padding:8px 14px;font-size:14px}
+.sim-compte{grid-template-columns:minmax(0,1fr) auto}
+.sim-compte.ouverte .nom-sim{font-weight:600}
+.sim-compte.ouverte .nom-sim::after{content:" · ouverte";font-weight:400;color:var(--vert)}
+.boutons-sim{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.boutons-sim .bouton{padding:6px 10px;font-size:13px}
+.bouton.second.danger-texte{color:var(--rouge);border-color:#efcfcb}
+@media (max-width:600px){.sim-compte{grid-template-columns:1fr}.boutons-sim{justify-content:flex-start}}
+.vue-compte,[data-form]{display:flex;flex-direction:column;gap:12px}
+.vue-compte[hidden]{display:none}
+#dlgCompte [data-vue=compte]{gap:18px}
+.coche-simple{display:flex;gap:10px;align-items:center;font-size:14px}
+.liens-compte{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.lien{border:0;background:none;padding:0;font:inherit;font-size:13.5px;color:var(--vert);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.sous-titre{font-size:14px;font-weight:600}
+.actions-compte{display:flex;gap:8px;flex-wrap:wrap}
+.zone-danger{border:1px solid #efcfcb;border-radius:10px;padding:10px 14px}
+.zone-danger summary{cursor:pointer;color:var(--rouge);font-size:14px;font-weight:500}
+.zone-danger form{margin-top:12px}
+.bouton.danger{background:var(--rouge)}.bouton.danger:hover{background:#7a1f1f}
+.outils .btn-compte{background:#f3efe6;color:var(--encre);border-color:#f3efe6;font-weight:600}
+.outils .btn-compte:hover{background:#fff;border-color:#fff}
+.outils .btn-compte.connecte::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#6fae55;margin-right:7px;vertical-align:1px}
 .titre-carte{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .titre-carte .bouton{padding:7px 14px;font-size:13.5px}
 .bonus-pc{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:12px;align-items:end;padding:10px 0;border-bottom:1px solid var(--trait2)}
@@ -169,22 +200,120 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
     <button type="button" id="partager">Partager</button>
     <button type="button" data-excel>Exporter Excel</button>
     <button type="button" id="nouvelle">Nouvelle simulation</button>
+    <button type="button" id="btnCompte" class="btn-compte" hidden>Se connecter</button>
   </div>
 </header>
 <dialog id="dlgSims" aria-labelledby="titreSims">
   <div class="dlg">
     <div class="dlg-tete"><h2 id="titreSims">Mes simulations</h2><button type="button" class="fermer" data-fermer aria-label="Fermer">×</button></div>
-    <div class="aide">Gardées dans ce navigateur, sans fichier. Pour les retrouver sur un autre appareil, utilisez « Partager » : le lien ouvre la simulation partout.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input id="nomSim" placeholder="Nom de la simulation" style="flex:1;min-width:180px" aria-label="Nom de la simulation">
-      <button type="button" class="bouton" id="garderSim" style="padding:9px 16px;font-size:15px">Enregistrer ici</button>
+      <input id="nomSim" placeholder="Nom de la simulation" style="flex:1;min-width:180px" aria-label="Nom de la simulation" maxlength="100">
     </div>
-    <div id="listeSims"></div>
+
+    <section class="bloc-sims" id="simsCompte" hidden>
+      <div class="bloc-tete"><h3>Dans mon compte</h3><span class="aide" id="simsCompteQui"></span></div>
+      <div id="simsCompteInvite" class="invite-compte" hidden>
+        <span>Enregistrez vos simulations dans votre compte pour les retrouver sur tous vos appareils.</span>
+        <button type="button" class="bouton" id="connecterPourSims">Se connecter pour enregistrer</button>
+      </div>
+      <div id="simsCompteActions" hidden>
+        <div class="actions-sims">
+          <button type="button" class="bouton" id="garderSimCompte">Enregistrer dans mon compte</button>
+          <button type="button" class="bouton second" id="majSimCompte" hidden></button>
+        </div>
+        <div class="msg err" id="simsCompteErreur" hidden></div>
+        <div id="listeSimsCompte" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="bloc-sims" id="simsLocales">
+      <div class="bloc-tete"><h3 id="titreSimsLocales">Dans ce navigateur</h3></div>
+      <div class="aide" id="aideSimsLocales">Gardées dans ce navigateur, sans fichier. Pour les retrouver sur un autre appareil, utilisez « Partager » : le lien ouvre la simulation partout.</div>
+      <div class="actions-sims">
+        <button type="button" class="bouton second" id="garderSim">Enregistrer dans ce navigateur</button>
+        <button type="button" class="bouton second" id="importerSims" hidden>Importer dans mon compte</button>
+      </div>
+      <div id="listeSims"></div>
+    </section>
+
     <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--trait2);padding-top:12px">
       <button type="button" class="bouton second" id="enregistrer" style="padding:8px 14px;font-size:14px">Exporter dans un fichier</button>
       <label for="ouvrirFichier" class="bouton second" style="padding:8px 14px;font-size:14px">Importer un fichier</label>
       <input type="file" id="ouvrirFichier" accept=".json,application/json" style="display:none">
     </div>
+  </div>
+</dialog>
+<dialog id="dlgCompte" aria-labelledby="titreCompte">
+  <div class="dlg">
+    <div class="dlg-tete"><h2 id="titreCompte">Connexion</h2><button type="button" class="fermer" data-fermer aria-label="Fermer">×</button></div>
+
+    <form class="vue-compte" data-vue="connexion" novalidate>
+      <label class="champ">Adresse e-mail<input type="email" name="email" autocomplete="username" required maxlength="254"></label>
+      <label class="champ">Mot de passe<input type="password" name="motDePasse" autocomplete="current-password" required></label>
+      <label class="coche-simple"><input type="checkbox" name="seSouvenir"> Se souvenir de moi (30 jours sur cet appareil)</label>
+      <div class="msg err" hidden></div>
+      <button type="submit" class="bouton">Se connecter</button>
+      <div class="liens-compte"><button type="button" class="lien" data-aller-vue="oubli">Mot de passe oublié ?</button><button type="button" class="lien" data-aller-vue="inscription">Créer un compte</button></div>
+    </form>
+
+    <form class="vue-compte" data-vue="inscription" novalidate hidden>
+      <label class="champ">Adresse e-mail<input type="email" name="email" autocomplete="email" required maxlength="254"></label>
+      <label class="champ">Pseudo<input type="text" name="pseudo" autocomplete="nickname" required minlength="2" maxlength="30"></label>
+      <label class="champ">Mot de passe<input type="password" name="motDePasse" autocomplete="new-password" required minlength="10"></label>
+      <label class="champ">Confirmation du mot de passe<input type="password" name="confirmation" autocomplete="new-password" required minlength="10"></label>
+      <div class="aide">10 caractères minimum. Une phrase de plusieurs mots est idéale ; les mots de passe les plus courants sont refusés.</div>
+      <div class="msg err" hidden></div>
+      <button type="submit" class="bouton">Créer mon compte</button>
+      <div class="liens-compte"><button type="button" class="lien" data-aller-vue="connexion">J’ai déjà un compte</button></div>
+    </form>
+
+    <form class="vue-compte" data-vue="oubli" novalidate hidden>
+      <div class="aide">Indiquez l’adresse de votre compte : vous recevrez un lien pour choisir un nouveau mot de passe, valable 1 heure.</div>
+      <label class="champ">Adresse e-mail<input type="email" name="email" autocomplete="email" required maxlength="254"></label>
+      <div class="msg err" hidden></div>
+      <button type="submit" class="bouton">Envoyer le lien</button>
+      <div class="liens-compte"><button type="button" class="lien" data-aller-vue="connexion">Retour à la connexion</button></div>
+    </form>
+
+    <form class="vue-compte" data-vue="reinitialisation" novalidate hidden>
+      <div class="aide">Choisissez votre nouveau mot de passe. Vos appareils connectés seront déconnectés.</div>
+      <label class="champ">Nouveau mot de passe<input type="password" name="motDePasse" autocomplete="new-password" required minlength="10"></label>
+      <label class="champ">Confirmation<input type="password" name="confirmation" autocomplete="new-password" required minlength="10"></label>
+      <div class="msg err" hidden></div>
+      <button type="submit" class="bouton">Enregistrer le mot de passe</button>
+    </form>
+
+    <div class="vue-compte" data-vue="compte" hidden>
+      <div class="boite"><span class="aide">Connecté avec</span><b id="compteEmail"></b></div>
+      <form data-form="pseudo" novalidate>
+        <label class="champ">Pseudo<input type="text" name="pseudo" autocomplete="nickname" required minlength="2" maxlength="30"></label>
+        <div class="msg err" hidden></div>
+        <button type="submit" class="bouton second">Modifier le pseudo</button>
+      </form>
+      <form data-form="motdepasse" novalidate>
+        <div class="sous-titre">Changer le mot de passe</div>
+        <input type="email" autocomplete="username" hidden tabindex="-1" aria-hidden="true" data-email-cache>
+        <label class="champ">Mot de passe actuel<input type="password" name="ancien" autocomplete="current-password" required></label>
+        <label class="champ">Nouveau mot de passe<input type="password" name="nouveau" autocomplete="new-password" required minlength="10"></label>
+        <label class="champ">Confirmation<input type="password" name="confirmation" autocomplete="new-password" required minlength="10"></label>
+        <div class="msg err" hidden></div>
+        <button type="submit" class="bouton second">Changer le mot de passe</button>
+      </form>
+      <div class="actions-compte">
+        <button type="button" class="bouton second" id="deconnexion">Se déconnecter</button>
+      </div>
+      <details class="zone-danger">
+        <summary>Supprimer mon compte</summary>
+        <form data-form="suppression" novalidate>
+          <div class="aide">Le compte et toutes ses simulations enregistrées seront supprimés définitivement.</div>
+          <label class="champ">Mot de passe<input type="password" name="motDePasse" autocomplete="current-password" required></label>
+          <div class="msg err" hidden></div>
+          <button type="submit" class="bouton danger">Supprimer définitivement</button>
+        </form>
+      </details>
+    </div>
+
+    <div class="msg ok" id="compteMessage" hidden></div>
   </div>
 </dialog>
 <dialog id="dlgPartage" aria-labelledby="titrePartage">
@@ -3051,6 +3180,136 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   function ouvrirDialogue(id) { var d = $(id); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
   document.querySelectorAll('[data-fermer]').forEach(function (b) { b.onclick = function () { b.closest('dialog').close(); }; });
 
+  // ---------- comptes utilisateurs (quand la page est servie par le serveur de l'appli) ----------
+  // Sur GitHub Pages ou en fichier local, il n'y a pas d'API : le bouton de compte reste caché
+  // et tout fonctionne comme avant (simulations gardées dans ce navigateur).
+  var compte = { dispo: false, utilisateur: null, csrf: null, apresConnexion: null };
+  function api(methode, url, corps) {
+    var h = { 'Content-Type': 'application/json' };
+    if (compte.csrf) h['X-CSRF-Token'] = compte.csrf;
+    // toute modification part avec un corps JSON (au besoin vide) : le serveur n'accepte que du JSON
+    if (corps === undefined && methode !== 'GET') corps = {};
+    return fetch(url, { method: methode, credentials: 'same-origin', cache: 'no-store', headers: h, body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(function (r) {
+        return (r.status === 204 ? Promise.resolve({}) : r.json().catch(function () { return {}; })).then(function (j) {
+          if (!r.ok) { var e = new Error(j.erreur || 'Le serveur ne répond pas correctement (' + r.status + ').'); e.statut = r.status; throw e; }
+          return j;
+        });
+      }, function () { throw new Error('Serveur injoignable. Vérifiez votre connexion.'); });
+  }
+  function majCompte(j) {
+    compte.utilisateur = j && j.utilisateur || null;
+    if (j && j.csrf) compte.csrf = j.csrf;
+    if (!compte.utilisateur) { compte.csrf = null; if (typeof simCourante !== 'undefined') simCourante = null; }
+    var b = $('btnCompte');
+    b.hidden = !compte.dispo;
+    b.textContent = compte.utilisateur ? compte.utilisateur.pseudo : 'Se connecter';
+    b.setAttribute('aria-label', compte.utilisateur ? 'Mon compte (' + compte.utilisateur.pseudo + ')' : 'Se connecter');
+    b.classList.toggle('connecte', !!compte.utilisateur);
+  }
+  var TITRES = { connexion: 'Connexion', inscription: 'Créer un compte', oubli: 'Mot de passe oublié', reinitialisation: 'Nouveau mot de passe', compte: 'Mon compte' };
+  function vueCompte(nom, texte) {
+    document.querySelectorAll('#dlgCompte .vue-compte').forEach(function (v) { v.hidden = v.dataset.vue !== nom; });
+    document.querySelectorAll('#dlgCompte .msg.err').forEach(function (m) { m.hidden = true; });
+    $('titreCompte').textContent = TITRES[nom];
+    $('compteMessage').hidden = !texte; $('compteMessage').textContent = texte || '';
+    if (nom === 'compte' && compte.utilisateur) {
+      $('compteEmail').textContent = compte.utilisateur.email;
+      document.querySelector('#dlgCompte [data-form=pseudo] [name=pseudo]').value = compte.utilisateur.pseudo;
+      document.querySelector('#dlgCompte [data-email-cache]').value = compte.utilisateur.email;
+    }
+    var v = document.querySelector('#dlgCompte [data-vue="' + nom + '"]');
+    var premier = v && v.querySelector('input:not([hidden]):not([type=checkbox])');
+    if (premier && nom !== 'compte') setTimeout(function () { premier.focus(); }, 50);
+  }
+  function ouvrirCompte(nom, texte) { vueCompte(nom || (compte.utilisateur ? 'compte' : 'connexion'), texte); if (!$('dlgCompte').open) ouvrirDialogue('dlgCompte'); }
+  // envoi d'un formulaire : bouton désactivé pendant l'attente, erreur affichée sous les champs
+  function soumettre(form, action) {
+    var bouton = form.querySelector('[type=submit]'), err = form.querySelector('.msg.err'), texte = bouton.textContent;
+    err.hidden = true; bouton.disabled = true; bouton.textContent = 'Patientez…';
+    return Promise.resolve().then(action).catch(function (e) { err.textContent = e.message; err.hidden = false; })
+      .then(function () { bouton.disabled = false; bouton.textContent = texte; });
+  }
+  function valeurs(form) {
+    var o = {};
+    form.querySelectorAll('input[name]').forEach(function (i) { o[i.name] = i.type === 'checkbox' ? i.checked : i.value; });
+    return o;
+  }
+  function verifierMdp(mdp, conf) {
+    if ([].concat(mdp.match(/[\s\S]/gu) || []).length < 10) throw new Error('Le mot de passe doit contenir au moins 10 caractères.');
+    if (conf !== undefined && mdp !== conf) throw new Error('Les deux mots de passe ne sont pas identiques.');
+  }
+  function connecte(j, texte) {
+    majCompte(j);
+    document.querySelectorAll('#dlgCompte input[type=password]').forEach(function (i) { i.value = ''; });
+    var suite = compte.apresConnexion; compte.apresConnexion = null;
+    if (suite) { $('dlgCompte').close(); suite(); } else vueCompte('compte', texte);
+    apresConnexionCompte();
+  }
+  function apresConnexionCompte() { /* complété à l'étape des simulations */ }
+  document.querySelectorAll('#dlgCompte [data-aller-vue]').forEach(function (b) { b.onclick = function () { vueCompte(b.dataset.allerVue); }; });
+  document.querySelector('#dlgCompte [data-vue=connexion]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    soumettre(f, function () { var v = valeurs(f); return api('POST', '/api/compte/connexion', { email: v.email, motDePasse: v.motDePasse, seSouvenir: v.seSouvenir }).then(function (j) { connecte(j, 'Bienvenue, ' + j.utilisateur.pseudo + '.'); }); });
+  };
+  document.querySelector('#dlgCompte [data-vue=inscription]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    soumettre(f, function () { var v = valeurs(f); verifierMdp(v.motDePasse, v.confirmation); return api('POST', '/api/compte/inscription', v).then(function (j) { connecte(j, 'Compte créé. Bienvenue, ' + j.utilisateur.pseudo + ' !'); }); });
+  };
+  document.querySelector('#dlgCompte [data-vue=oubli]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    soumettre(f, function () { return api('POST', '/api/compte/mot-de-passe-oublie', { email: valeurs(f).email }).then(function (j) { vueCompte('connexion', j.message); }); });
+  };
+  document.querySelector('#dlgCompte [data-vue=reinitialisation]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    soumettre(f, function () {
+      var v = valeurs(f); verifierMdp(v.motDePasse, v.confirmation);
+      return api('POST', '/api/compte/reinitialisation', { jeton: compte.jetonReinit, motDePasse: v.motDePasse, confirmation: v.confirmation }).then(function (j) {
+        compte.jetonReinit = null; majCompte(null); f.reset(); vueCompte('connexion', j.message);
+      });
+    });
+  };
+  document.querySelector('#dlgCompte [data-form=pseudo]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    soumettre(f, function () { return api('PATCH', '/api/compte', { pseudo: valeurs(f).pseudo }).then(function (j) { majCompte({ utilisateur: j.utilisateur }); vueCompte('compte', 'Pseudo modifié.'); }); });
+  };
+  document.querySelector('#dlgCompte [data-form=motdepasse]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    soumettre(f, function () {
+      var v = valeurs(f); verifierMdp(v.nouveau, v.confirmation);
+      return api('POST', '/api/compte/mot-de-passe', { ancien: v.ancien, nouveau: v.nouveau, confirmation: v.confirmation }).then(function (j) { compte.csrf = j.csrf; f.reset(); vueCompte('compte', j.message); });
+    });
+  };
+  document.querySelector('#dlgCompte [data-form=suppression]').onsubmit = function (ev) {
+    ev.preventDefault(); var f = this;
+    if (!confirm('Supprimer définitivement votre compte et toutes ses simulations ?')) return;
+    soumettre(f, function () { return api('DELETE', '/api/compte', { motDePasse: valeurs(f).motDePasse }).then(function () { majCompte(null); f.reset(); $('dlgCompte').close(); message('Compte supprimé, avec toutes ses simulations.', 'ok'); }); });
+  };
+  $('deconnexion').onclick = function () {
+    var b = this; b.disabled = true;
+    api('POST', '/api/compte/deconnexion').then(function () { majCompte(null); $('dlgCompte').close(); message('Vous êtes déconnecté.', 'ok'); },
+      function (e) { if (e.statut === 401) { majCompte(null); $('dlgCompte').close(); message('Vous êtes déconnecté.', 'ok'); } else message('Déconnexion impossible : ' + e.message, 'err'); })
+      .then(function () { b.disabled = false; });
+  };
+  $('btnCompte').onclick = function () { ouvrirCompte(); };
+  // au chargement : le serveur est-il là, et sommes-nous connectés ? Puis lien de réinitialisation éventuel.
+  (function () {
+    if (!/^https?:/.test(location.protocol)) return;
+    fetch('/api/compte/moi', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
+      if (r.status !== 200 && r.status !== 401) return;
+      return r.json().then(function (j) {
+        compte.dispo = true; majCompte(r.status === 200 ? j : null);
+        var jeton = new URLSearchParams(location.search).get('reinitialiser');
+        if (jeton) {
+          compte.jetonReinit = jeton;
+          history.replaceState(null, '', location.pathname + location.hash); // le jeton ne reste pas dans l'adresse
+          ouvrirCompte('reinitialisation');
+        }
+        if (compte.utilisateur) apresConnexionCompte();
+      });
+    }).catch(function () { /* pas de serveur : mode sans compte */ });
+  })();
+
   // ---------- Mes simulations : sauvegardes nommées, dans ce navigateur ----------
   var CLE_LISTE = 'course2eVillage.mesSimulations';
   function lireListe() { try { return JSON.parse(localStorage.getItem(CLE_LISTE) || '[]'); } catch (x) { return []; } }
@@ -3081,7 +3340,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   $('mesSims').onclick = function () {
     var d = new Date();
     if (!$('nomSim').value) $('nomSim').value = 'Simulation du ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + 'h' + pad(d.getMinutes());
-    dessinerListe(); ouvrirDialogue('dlgSims');
+    dessinerListe(); dessinerSimsCompte(); ouvrirDialogue('dlgSims');
   };
   $('garderSim').onclick = function () {
     var nom = $('nomSim').value.trim() || 'Simulation';
@@ -3089,10 +3348,132 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     compresser(JSON.stringify(allege())).then(function (code) {
       var l = lireListe().filter(function (x) { return x.nom !== nom; }); // même nom : remplacée
       l.unshift({ nom: nom, date: new Date().toISOString(), depart: depart, code: code });
-      try { ecrireListe(l); dessinerListe(); message('« ' + nom + ' » enregistrée dans ce navigateur.', 'ok'); }
+      try { ecrireListe(l); dessinerListe(); if (compte.utilisateur) $('importerSims').hidden = false; message('« ' + nom + ' » enregistrée dans ce navigateur.', 'ok'); }
       catch (x) { message('Enregistrement impossible : stockage du navigateur plein ou bloqué.', 'err'); }
     });
   };
+
+  // ---------- simulations du compte (serveur) ----------
+  // Format enregistré : le paquet compact des liens de partage (formatVersion 3 : saisies + choix du plan, rejoués à l'ouverture).
+  // Les simulations importées depuis ce navigateur gardent leur capture complète (formatVersion 1).
+  var FORMAT_PAQUET = 3, FORMAT_CAPTURE = 1;
+  var simCourante = null; // simulation du compte ouverte en ce moment : { id, nom }
+  function resumeCourant() {
+    var m = resultat && resultat.r && resultat.r.meilleur;
+    return m && isFinite(m.T) ? 'départ ' + $('rDepart').textContent : null;
+  }
+  function dateCourte(s) { var d = new Date(s); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' à ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function erreurSims(e) { $('simsCompteErreur').textContent = e ? e.message : ''; $('simsCompteErreur').hidden = !e; }
+  function occupe(b, oui) { if (!b) return; if (oui) { b.dataset.texte = b.textContent; b.textContent = 'Patientez…'; b.disabled = true; } else { b.textContent = b.dataset.texte || b.textContent; b.disabled = false; } }
+  function dessinerSimsCompte() {
+    var dispo = compte.dispo, co = !!compte.utilisateur;
+    $('simsCompte').hidden = !dispo;
+    $('simsCompteInvite').hidden = !dispo || co;
+    $('simsCompteActions').hidden = !co;
+    $('simsCompteQui').textContent = co ? compte.utilisateur.email : '';
+    $('titreSimsLocales').textContent = dispo ? 'Dans ce navigateur' : 'Mes simulations';
+    $('importerSims').hidden = !co || !lireListe().length;
+    $('majSimCompte').hidden = !co || !simCourante;
+    if (simCourante) $('majSimCompte').textContent = 'Mettre à jour « ' + simCourante.nom + ' »';
+    erreurSims(null);
+    if (!co) return;
+    $('listeSimsCompte').innerHTML = '<div class="aide">Chargement…</div>';
+    api('GET', '/api/simulations').then(function (j) {
+      var l = j.simulations;
+      $('listeSimsCompte').innerHTML = l.length ? l.map(function (x) {
+        return '<div class="sim sim-compte' + (simCourante && simCourante.id === x.id ? ' ouverte' : '') + '" data-id="' + esc(x.id) + '" data-nom="' + esc(x.nom) + '"><span><span class="nom-sim">' + esc(x.nom) + '</span><br><small>modifiée le ' + dateCourte(x.modifieLe) + (x.resume ? ' · ' + esc(x.resume) : '') + '</small></span>' +
+          '<span class="boutons-sim"><button type="button" class="bouton" data-act="ouvrir">Ouvrir</button>' +
+          '<button type="button" class="bouton second" data-act="renommer">Renommer</button>' +
+          '<button type="button" class="bouton second" data-act="dupliquer">Dupliquer</button>' +
+          '<button type="button" class="bouton second danger-texte" data-act="supprimer" aria-label="Supprimer ' + esc(x.nom) + '">Supprimer</button></span></div>';
+      }).join('') : '<div class="aide">Aucune simulation dans votre compte pour l’instant.</div>';
+    }).catch(function (e) { $('listeSimsCompte').innerHTML = ''; erreurSims(e); if (e.statut === 401) { majCompte(null); dessinerSimsCompte(); } });
+  }
+  function nomSaisi() {
+    var d = new Date();
+    return $('nomSim').value.trim() || 'Simulation du ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + 'h' + pad(d.getMinutes());
+  }
+  $('garderSimCompte').onclick = function () {
+    var b = this; occupe(b, true); erreurSims(null);
+    api('POST', '/api/simulations', { nom: nomSaisi(), formatVersion: FORMAT_PAQUET, donnees: paquetPartage(), resume: resumeCourant() })
+      .then(function (j) { simCourante = { id: j.simulation.id, nom: j.simulation.nom }; message('« ' + j.simulation.nom + ' » enregistrée dans votre compte.', 'ok'); dessinerSimsCompte(); })
+      .catch(erreurSims).then(function () { occupe(b, false); });
+  };
+  $('majSimCompte').onclick = function () {
+    if (!simCourante) return;
+    var b = this; occupe(b, true); erreurSims(null);
+    api('PATCH', '/api/simulations/' + encodeURIComponent(simCourante.id), { formatVersion: FORMAT_PAQUET, donnees: paquetPartage(), resume: resumeCourant() })
+      .then(function () { message('« ' + simCourante.nom + ' » mise à jour.', 'ok'); dessinerSimsCompte(); })
+      .catch(function (e) { if (e.statut === 404) simCourante = null; erreurSims(e); }).then(function () { occupe(b, false); });
+  };
+  $('listeSimsCompte').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button[data-act]'); if (!b) return;
+    var ligne = b.closest('[data-id]'), id = ligne.dataset.id, nom = ligne.dataset.nom, url = '/api/simulations/' + encodeURIComponent(id);
+    erreurSims(null);
+    if (b.dataset.act === 'ouvrir') {
+      occupe(b, true);
+      api('GET', url).then(function (j) {
+        var s = j.simulation;
+        if (s.formatVersion === FORMAT_PAQUET) ouvrirPaquet(s.donnees);
+        else if (s.formatVersion === FORMAT_CAPTURE) restaurer(s.donnees);
+        else throw new Error('Format de simulation inconnu (' + s.formatVersion + ') : mettez l’application à jour.');
+        simCourante = { id: s.id, nom: s.nom };
+        memoriser(); $('dlgSims').close(); message('« ' + s.nom + ' » ouverte depuis votre compte.', 'ok');
+      }).catch(erreurSims).then(function () { occupe(b, false); });
+    } else if (b.dataset.act === 'renommer') {
+      var nouveau = prompt('Nouveau nom de la simulation :', nom);
+      if (nouveau === null || !nouveau.trim() || nouveau.trim() === nom) return;
+      api('PATCH', url, { nom: nouveau.trim() }).then(function (j) { if (simCourante && simCourante.id === id) simCourante.nom = j.simulation.nom; dessinerSimsCompte(); }).catch(erreurSims);
+    } else if (b.dataset.act === 'dupliquer') {
+      occupe(b, true);
+      api('POST', url + '/dupliquer').then(function () { dessinerSimsCompte(); }).catch(function (e) { occupe(b, false); erreurSims(e); });
+    } else if (b.dataset.act === 'supprimer') {
+      if (!confirm('Supprimer définitivement « ' + nom + ' » de votre compte ?')) return;
+      api('DELETE', url).then(function () { if (simCourante && simCourante.id === id) simCourante = null; dessinerSimsCompte(); }).catch(erreurSims);
+    }
+  });
+  // simulations de ce navigateur → compte (capture complète ; si trop lourde, sans le résultat, qui se recalcule)
+  function importerLocales() {
+    var l = lireListe();
+    if (!l.length) return Promise.resolve(0);
+    return Promise.all(l.map(function (x) {
+      return decompresser(x.code).then(function (t) {
+        var d = JSON.parse(t);
+        if (t.length > 250 * 1024) d.resultat = null;
+        return { nom: x.nom.slice(0, 100), formatVersion: FORMAT_CAPTURE, donnees: d, resume: x.depart ? 'départ ' + x.depart : null, date: x.date };
+      }).catch(function () { return null; });
+    })).then(function (sims) {
+      sims = sims.filter(Boolean);
+      var lots = [];
+      for (var i = 0; i < sims.length; i += 50) lots.push(sims.slice(i, i + 50));
+      return lots.reduce(function (p, lot) { return p.then(function (n) { return api('POST', '/api/simulations/import', { simulations: lot }).then(function (j) { return n + j.importees; }); }); }, Promise.resolve(0));
+    });
+  }
+  $('importerSims').onclick = function () {
+    var b = this, n = lireListe().length;
+    if (!confirm('Importer les ' + n + ' simulation' + (n > 1 ? 's' : '') + ' de ce navigateur dans votre compte ? Elles restent aussi dans ce navigateur.')) return;
+    occupe(b, true); erreurSims(null);
+    importerLocales().then(function (k) { message(k + ' simulation' + (k > 1 ? 's importées' : ' importée') + ' dans votre compte.', 'ok'); dessinerSimsCompte(); })
+      .catch(erreurSims).then(function () { occupe(b, false); });
+  };
+  $('connecterPourSims').onclick = function () {
+    $('dlgSims').close();
+    compte.apresConnexion = function () { $('mesSims').click(); };
+    ouvrirCompte('connexion');
+  };
+  // après une connexion : proposer une fois d'importer les simulations gardées dans ce navigateur
+  apresConnexionCompte = function () {
+    var n = lireListe().length, cle = 'course2eVillage.importPropose.' + compte.utilisateur.email;
+    var deja = false; try { deja = localStorage.getItem(cle) === '1'; } catch (x) { deja = true; }
+    if (!n || deja) return;
+    try { localStorage.setItem(cle, '1'); } catch (x) { /* rien */ }
+    setTimeout(function () {
+      if (!confirm('Vous avez ' + n + ' simulation' + (n > 1 ? 's' : '') + ' enregistrée' + (n > 1 ? 's' : '') + ' dans ce navigateur. Les importer dans votre compte ?')) return;
+      importerLocales().then(function (k) { message(k + ' simulation' + (k > 1 ? 's importées' : ' importée') + ' dans votre compte.', 'ok'); if ($('dlgSims').open) dessinerSimsCompte(); })
+        .catch(function (e) { message('Import impossible : ' + e.message, 'err'); });
+    }, 300);
+  };
+
 
   // ---------- Partager : un lien qui ouvre la simulation chez n'importe qui ----------
   // Lien court si la base Firebase du projet accepte l'enregistrement (chemin course2e/partages),
