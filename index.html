@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="1790233975771">
+<meta name="version" content="1790266268278">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +132,10 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+.bonus-pc{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:12px;align-items:end;padding:10px 0;border-bottom:1px solid var(--trait2)}
+.bonus-pc .coche{display:flex;gap:10px;align-items:center;font-size:14px;padding-bottom:10px}
+.bonus-pc:has(input[type=checkbox]:not(:checked)) .champ{opacity:.45}
+@media (max-width:600px){.bonus-pc{grid-template-columns:1fr}}
 .mort{display:grid;grid-template-columns:minmax(0,1fr) 90px 90px;gap:12px;align-items:end;padding:12px 14px;border:1px solid var(--trait);border-radius:12px;font-size:14px}
 .defile.eclair{animation:eclair .9s ease-out}
 @keyframes eclair{from{box-shadow:0 0 0 3px rgba(47,93,58,.35)}to{box-shadow:0 0 0 3px rgba(47,93,58,0)}}
@@ -335,6 +339,18 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
         </div>
       </section>
       <section class="carte">
+        <h2>Bonus de culture</h2>
+        <div class="bonus-pc">
+          <label class="coche"><input type="checkbox" id="pcAlliance"><span><b>Bonus d’alliance</b> · +4 % de production de PC</span></label>
+          <label class="champ">Activé le (heure du serveur)<input type="datetime-local" id="pcAllianceDate"></label>
+        </div>
+        <div class="bonus-pc">
+          <label class="coche"><input type="checkbox" id="pcCasque"><span><b>Casque du gladiateur</b> · +100 PC par jour</span></label>
+          <label class="champ">Activé le (heure du serveur)<input type="datetime-local" id="pcCasqueDate"></label>
+        </div>
+        <div class="aide">Date vide ou déjà passée : bonus compté dès maintenant ; date à venir : à partir de cette heure. Ces bonus s’ajoutent aux PC cumulés ; la petite fête rapporte toujours les PC par jour du village seul.</div>
+      </section>
+      <section class="carte">
         <h2>Quêtes quotidiennes</h2>
         <label class="champ" style="max-width:260px">Palier atteint chaque jour<select id="quotidien"><option value="100">100 points</option><option value="75">75 points</option><option value="50">50 points</option><option value="25">25 points</option><option value="0">Aucun</option></select></label>
         <div class="aide">Récompenses comptées dans l’ordre fixe du jeu ; celles tirées au hasard ne sont pas comptées.</div>
@@ -525,6 +541,9 @@ var Moteur = (function () {
       pc: e.pc || 0,
       feteFin: e.feteFinDans != null ? e.feteFinDans : -1,
       herosMortFin: e.herosMortDans > 0 ? e.herosMortDans : 0, // héros mort : réanimé à cette heure (0 = vivant)
+      // bonus de culture : actifs dès maintenant, ou à partir de leur heure d'activation (null = non)
+      pcAllianceDebut: e.pcAllianceDans == null ? null : Math.max(0, e.pcAllianceDans),
+      pcCasqueDebut: e.pcCasqueDans == null ? null : Math.max(0, e.pcCasqueDans),
       fetes: 0,
       lanes: [], // constructions : {fin, debut, champ, cle, label}
       form: [], // formations de troupes : {fin, u, n}
@@ -581,7 +600,7 @@ var Moteur = (function () {
       colonsFaits: s.colonsFaits, colonFin: s.colonFin,
       heros: { niv: s.heros.niv, xp: s.heros.xp, pts: s.heros.pts, type: s.heros.type, mode: s.heros.mode },
       troupes: s.troupes.slice(), butinHeros: s.butinHeros, butinParCapacite: s.butinParCapacite, butinFixe: s.butinFixe,
-      bonusTemp: s.bonusTemp.slice(), plusTempFin: s.plusTempFin, herosMortFin: s.herosMortFin,
+      bonusTemp: s.bonusTemp.slice(), plusTempFin: s.plusTempFin, herosMortFin: s.herosMortFin, pcAllianceDebut: s.pcAllianceDebut, pcCasqueDebut: s.pcCasqueDebut,
       rang: new Int8Array(s.rang), prochainReset: s.prochainReset,
       or: { plus: s.or.plus, bonus: s.or.bonus, fin: s.or.fin, pnj: s.or.pnj, maitre: s.or.maitre },
       depense: { champs: s.depense.champs.slice(), batiments: s.depense.batiments.slice(), fetes: s.depense.fetes.slice(), troupes: s.depense.troupes.slice(), depart: s.depense.depart.slice() },
@@ -664,10 +683,14 @@ var Moteur = (function () {
     for (r = 0; r < 4; r++) net[r] = champs[r] + heros[r] + bonus[r] + pillage / 4;
     net[3] -= conso;
     s._prod = { champs: champs, heros: heros, bonus: bonus, pillage: pillage, conso: conso, net: net, cap: capacite(s),
-      pcJour: pcParJour(s) * v, pop: population(s) };
+      pcJour: pcParJour(s) * v, pcTotal: pcTotal(s, pcParJour(s) * v), pop: population(s) };
     return s._prod;
   }
   function invalider(s) { s._prod = null; }
+  // PC par jour du compte : ceux du village, +4 % avec le bonus d'alliance, +100 avec le casque du gladiateur
+  // (la petite fête et les tâches « PC par jour » restent calculées sur le village seul)
+  function bonusActifPC(s, debut) { return debut !== null && debut !== undefined && debut <= s.t + 1e-6; }
+  function pcTotal(s, village) { return village * (bonusActifPC(s, s.pcAllianceDebut) ? 1.04 : 1) + (bonusActifPC(s, s.pcCasqueDebut) ? 100 : 0); }
 
   // ---------- tâches ----------
   function valeurTache(s, tc) {
@@ -744,7 +767,7 @@ var Moteur = (function () {
     var p = production(s);
     if (!s.proj) s.proj = { pop: p.pop, pcj: p.pcJour };
     if (gain) { s.proj.pop += gain.pop; s.proj.pcj += gain.pcj; }
-    j.pc = s.pc; j.pop = s.proj.pop; j.pcj = s.proj.pcj;
+    j.pc = s.pc; j.pop = s.proj.pop; j.pcj = pcTotal(s, s.proj.pcj);
     j.stock = s.stock.map(Math.round); j.reserve = s.reserve.map(Math.round); j.cap = p.cap.slice(); // stock et inventaire juste après l'action (paiement déduit)
     j.pertes = s.compta.pertes.map(Math.round); // pertes cumulées depuis le début du plan
     s.journal.push(j);
@@ -760,6 +783,8 @@ var Moteur = (function () {
     if (s.feteFin > s.t && s.feteFin < t) t = s.feteFin;
     for (var r = 0; r < 4; r++) if (s.bonusTemp[r] > s.t && s.bonusTemp[r] < t) t = s.bonusTemp[r];
     if (s.herosMortFin > s.t && s.herosMortFin < t) t = s.herosMortFin;
+    if (s.pcAllianceDebut > s.t && s.pcAllianceDebut < t) t = s.pcAllianceDebut;
+    if (s.pcCasqueDebut > s.t && s.pcCasqueDebut < t) t = s.pcCasqueDebut;
     return t;
   }
   // fait couler le temps jusqu'à t (sans franchir d'événement : l'appelant s'en charge)
@@ -776,7 +801,7 @@ var Moteur = (function () {
       if (x > p.cap[r]) { c.pertes[r] += x - p.cap[r]; x = p.cap[r]; }
       s.stock[r] = x;
     }
-    s.pc += p.pcJour * dt / J;
+    s.pc += p.pcTotal * dt / J;
     if (s.journal) { // courbe du pillage (rejeu seulement) : paliers de butin horaire constant
       var ph = s.heros.mode === 'combat' ? s.butinHeros : 0, seg = s.pil || (s.pil = []), der = seg[seg.length - 1];
       if (der && der.taux === p.pillage && der.heros === ph && Math.abs(der.fin - s.t) < 1e-6) der.fin = t;
@@ -799,6 +824,12 @@ var Moteur = (function () {
     if (s.colonFin >= 0 && s.colonFin <= s.t + 1e-6) { s.colonsFaits++; s.colonFin = -1; change = true; }
     if (s.prochainReset <= s.t + 1e-6) { recompenseQuotidienne(s); s.prochainReset += J; change = true; }
     for (var r = 0; r < 4; r++) if (s.bonusTemp[r] > 0 && s.bonusTemp[r] <= s.t + 1e-6) { s.bonusTemp[r] = 0; change = true; }
+    [['pcAllianceDebut', 'Bonus d’alliance activé : +4 % de PC par jour'], ['pcCasqueDebut', 'Casque du gladiateur activé : +100 PC par jour']].forEach(function (b) {
+      if (s[b[0]] > 0 && s[b[0]] <= s.t + 1e-6 && !s['vu' + b[0]]) {
+        s['vu' + b[0]] = true; change = true; invalider(s);
+        if (s.journal) journaliser(s, { t: s.t, type: 'heros', label: b[1], gain: '' });
+      }
+    });
     if (s.herosMortFin > 0 && s.herosMortFin <= s.t + 1e-6) {
       s.herosMortFin = 0; change = true;
       if (s.journal) { invalider(s); journaliser(s, { t: s.t, type: 'heros', label: 'Héros réanimé : sa production reprend', gain: '' }); }
@@ -1179,7 +1210,7 @@ var Moteur = (function () {
     while (guard++ < 600) {
       if (s.t > HORIZON) return Infinity;
       var pcOk = s.pc >= besoinPC - 1e-6;
-      var pj = production(s).pcJour;
+      var pj = production(s).pcTotal;
       // PC encore manquants au départ le plus tôt possible : il faudra des fêtes
       var pcCourts = !pcOk && s.pc + pj * Math.max(0, borne(s) - s.t) / J < besoinPC;
       var fete = null, hdv = null, res = null, colon = null;
@@ -1565,7 +1596,7 @@ var Moteur = (function () {
       T: T, mode: plan.mode, nom: plan.nom || '', variante: plan.v, borne: borneOpt, journal: s.journal,
       // les choix du plan : rejoués avec les mêmes saisies, ils redonnent exactement ce résultat (liens de partage courts)
       plan: { actions: plan.actions, v: plan.v, mode: plan.mode, nom: plan.nom || '' },
-      pcJour: p.pcJour, prodNet: p.net, pc: s.pc, fetes: s.fetes,
+      pcJour: p.pcTotal, prodNet: p.net, pc: s.pc, fetes: s.fetes,
       depense: s.depense, compta: s.compta, or: or, stockDepart: depart,
       stockFinal: [0, 1, 2, 3].map(function (r) { return s.stock[r] + s.reserve[r]; }),
       acquis: bilanActuel(e), pillage: resumePillage(s, T), alertes: alertes
@@ -1821,7 +1852,7 @@ var Moteur = (function () {
     var p = production(s), dep = null;
     s.journal.forEach(function (j) { if (j.type === 'depart') dep = j.t; });
     return {
-      lignes: res, journal: s.journal, fin: s.t, depart: dep, pc: s.pc, pcRequis: D.pcRequis, pcJour: p.pcJour, pop: p.pop,
+      lignes: res, journal: s.journal, fin: s.t, depart: dep, pc: s.pc, pcRequis: D.pcRequis, pcJour: p.pcTotal, pop: p.pop,
       prodNet: p.net, cap: p.cap, stock: s.stock.slice(), reserve: s.reserve.slice(), depense: s.depense, compta: s.compta,
       colons: s.colonsFaits, fetes: s.fetes, emplacements: emplacementsOccupes(s), famine: s.famine, pillage: resumePillage(s, s.t),
       or: { fin: s.or.fin, pnj: s.or.pnj, maitre: s.or.maitre }
@@ -1833,7 +1864,7 @@ var Moteur = (function () {
     if (s.colonFin >= 0) { if (s.colonFin > s.t + 60) motif = 'le dernier colon en formation'; avancerJusqua(s, s.colonFin); }
     if (s.colonsFaits < 3) return 'il faut d’abord former 3 colons (' + s.colonsFaits + ' formé' + (s.colonsFaits > 1 ? 's' : '') + ')';
     if (s.pc < D.pcRequis - 1e-6) {
-      var pj = production(s).pcJour, t = pj > 0 ? s.t + (D.pcRequis - s.pc) / pj * J : Infinity;
+      var pj = production(s).pcTotal, t = pj > 0 ? s.t + (D.pcRequis - s.pc) / pj * J : Infinity;
       if (!(t <= HORIZON)) return 'PC insuffisants : ' + Math.ceil(D.pcRequis - s.pc) + ' manquants, trop lents à venir (ajoutez des fêtes)';
       if (t > s.t + 60) motif = 'les PC (' + D.pcRequis + ' requis)';
       avancerJusqua(s, t);
@@ -2106,6 +2137,12 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   }
   ['feteEnCours', 'feteFinHeure', 'dateCollage'].forEach(function (id) { $(id).addEventListener('input', majFete); $(id).addEventListener('change', majFete); });
   $('collage').addEventListener('input', function () { setTimeout(majFete, 0); });
+  // bonus activé : secondes entre le collage et l'activation (0 = déjà actif), null = non coché
+  function bonusDans(id, ic) {
+    if (!$(id).checked) return null;
+    var d = utc($(id + 'Date').value);
+    return d === null || ic === null ? 0 : Math.max(0, (d - ic) / 1000);
+  }
   function depuisOuverture() {
     var o = utc($('ouverture').value), c = instantCollage();
     return o === null || c === null ? null : (c - o) / 1000;
@@ -2149,6 +2186,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
       heros: { niveau: +$('hNiv').value || 0, xp: +$('hXp').value || 0, pointsProd: +$('hProd').value || 0, typeProd: typeProd === 'tout' ? 'tout' : +typeProd,
         mode: document.querySelector('input[name=mode]:checked').value, auto: $('hAuto').checked },
       troupes: troupes.slice(), butinHeros: bh, butinTroupes: bt,
+      pcAllianceDans: bonusDans('pcAlliance', ic), pcCasqueDans: bonusDans('pcCasque', ic),
       herosMortDans: Math.max(0, (+$('hMortH').value || 0) * 3600 + (+$('hMortM').value || 0) * 60),
       pc: +$('pc').value || 0, feteFinDans: ff !== null && ic !== null && ff > ic ? (ff - ic) / 1000 : null,
       quotidien: +$('quotidien').value, tachesTouchees: touchees.slice(), formerTroupes: $('oTroupes').checked, exclusions: retraits.map(function (x) { return x.cle; }),
