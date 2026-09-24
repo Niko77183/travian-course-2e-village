@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="1790233488710">
+<meta name="version" content="1790233975771">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -229,7 +229,12 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
         <h2>Culture</h2>
         <div class="l2">
           <label class="champ">PC cumulés<input type="number" id="pc" min="0" placeholder="à relever dans le jeu"></label>
-          <label class="champ">Fête en cours : fin (heure du serveur)<input type="datetime-local" id="feteFin"></label>
+          <div class="champ">
+            <label style="display:flex;gap:10px;align-items:center;font-size:14px;font-weight:500;color:var(--encre);min-height:38px"><input type="checkbox" id="feteEnCours">Fête en cours</label>
+            <label class="champ" id="blocFeteFin" hidden>Heure de fin (heure du serveur)<input type="time" id="feteFinHeure"></label>
+            <span class="aide" id="feteInfo"></span>
+            <input type="hidden" id="feteFin">
+          </div>
         </div>
         <div class="aide" id="objectifPC"></div>
       </section>
@@ -2086,6 +2091,21 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (d === null || !lu || !lu.heure) return null;
     return d + ((lu.heure[0] * 60 + lu.heure[1]) * 60 + lu.heure[2]) * 1000;
   }
+  // fête en cours : heure de fin saisie seule ; le jour est celui du collage, ou le lendemain si l'heure est déjà passée
+  function feteFinMs() {
+    if (!$('feteEnCours').checked || !$('feteFinHeure').value) return null;
+    var ms = utc($('dateCollage').value + 'T' + $('feteFinHeure').value), ic = instantCollage();
+    if (ms === null) return null;
+    if (ic !== null && ms <= ic) ms += 86400000;
+    return ms;
+  }
+  function majFete() {
+    var oui = $('feteEnCours').checked, ms = feteFinMs(), ic = instantCollage();
+    $('blocFeteFin').hidden = !oui;
+    $('feteInfo').textContent = oui && ms !== null ? 'Fin le ' + fmtDate(ms) + (ic !== null ? ', dans ' + fmtServ((ms - ic) / 1000) : '') + ' : pas de nouvelle fête avant.' : oui ? 'Indiquez l’heure de fin affichée à l’Hôtel de ville.' : '';
+  }
+  ['feteEnCours', 'feteFinHeure', 'dateCollage'].forEach(function (id) { $(id).addEventListener('input', majFete); $(id).addEventListener('change', majFete); });
+  $('collage').addEventListener('input', function () { setTimeout(majFete, 0); });
   function depuisOuverture() {
     var o = utc($('ouverture').value), c = instantCollage();
     return o === null || c === null ? null : (c - o) / 1000;
@@ -2116,7 +2136,7 @@ if (typeof module !== 'undefined') module.exports = Moteur;
   function entree() {
     var b = butinParHeure();
     var bh = b.heros, bt = b.troupes;
-    var ff = utc($('feteFin').value), ic = instantCollage();
+    var ff = feteFinMs(), ic = instantCollage();
     var typeProd = $('hType').value;
     return {
       tribu: $('tribu').value, vitesse: +$('vitesse').value, depuisOuverture: depuisOuverture() || 0,
@@ -2724,6 +2744,10 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     document.querySelectorAll('.b25').forEach(function (x, i) { x.checked = !!(s.bonus25 || [])[i]; });
     resultat = d.resultat || null;
     faits = s.faits || {};
+    if ($('feteFin').value && !$('feteFinHeure').value) { // simulations enregistrées avant la case « Fête en cours »
+      $('feteEnCours').checked = true; $('feteFinHeure').value = $('feteFin').value.slice(11, 16); $('feteFin').value = '';
+    }
+    majFete();
     strat = s.strategie || [];
     touchees = s.touchees || [];
     retraits = s.retraits || [];
