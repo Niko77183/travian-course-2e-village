@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="1790266268278">
+<meta name="version" content="1790266936643">
 <title>Course au 2e village</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +132,8 @@ td.coche{text-align:center}
 .ajout{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ajout .bouton{padding:9px 16px;font-size:14px}
 tr.auto td{color:var(--doux);font-style:italic}
+.titre-carte{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.titre-carte .bouton{padding:7px 14px;font-size:13.5px}
 .bonus-pc{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:12px;align-items:end;padding:10px 0;border-bottom:1px solid var(--trait2)}
 .bonus-pc .coche{display:flex;gap:10px;align-items:center;font-size:14px;padding-bottom:10px}
 .bonus-pc:has(input[type=checkbox]:not(:checked)) .champ{opacity:.45}
@@ -165,6 +167,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
   <div class="outils">
     <button type="button" id="mesSims">Mes simulations</button>
     <button type="button" id="partager">Partager</button>
+    <button type="button" data-excel>Exporter Excel</button>
     <button type="button" id="nouvelle">Nouvelle simulation</button>
   </div>
 </header>
@@ -440,7 +443,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
       <div class="defile"><table class="balance"><thead><tr><th></th><th>Bois</th><th>Argile</th><th>Fer</th><th>Céréales</th><th>Total</th></tr></thead><tbody id="rBalance"></tbody></table></div>
     </section>
     <section class="carte">
-      <h2>Planning</h2>
+      <div class="titre-carte"><h2>Planning</h2><button type="button" class="bouton second" data-excel>Exporter Excel</button></div>
       <div class="aide">Population et PC par jour : une fois terminés les chantiers lancés jusqu’à la ligne. Cochez « Fait » au fur et à mesure : c’est enregistré avec la simulation. « × » retire une action que vous ne voulez pas faire : le plan se met à jour sans elle.</div>
       <div id="rRetraits"></div>
       <div class="defile"><table><thead><tr><th class="n" title="Heure de lancement">Date</th><th>Action</th><th class="n">Coût</th><th class="n" title="Heure où les ressources de l’action sont disponibles">Ressources réunies</th><th class="n" title="Temps avant d’avoir les ressources, depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th><th class="c">Fait</th><th class="c" title="Retirer une action du plan">Retirer</th></tr></thead><tbody id="rPlanning"></tbody></table></div>
@@ -480,7 +483,7 @@ tr.touchee td{color:var(--pale)}tr.touchee td:nth-child(-n+3) .libelle{text-deco
       </div>
       <div id="sAlertes" style="display:flex;flex-direction:column;gap:8px"></div>
       <section class="carte">
-        <h2>Déroulé détaillé</h2>
+        <div class="titre-carte"><h2>Déroulé détaillé</h2><button type="button" class="bouton second" data-excel>Exporter Excel</button></div>
         <div class="aide">Chaque niveau dans l’ordre où il est lancé. En italique : ce que le moteur a ajouté (prérequis, dépôt, silo).</div>
         <div class="defile"><table><thead><tr><th class="n">Date</th><th class="n">Ligne</th><th>Action</th><th class="n">Coût</th><th class="n" title="Heure où les ressources de l’action sont disponibles">Ressources réunies</th><th class="n" title="Temps avant d’avoir les ressources, depuis l’action précédente">Attente</th><th class="c">Marchand PNJ</th><th class="n">Population</th><th class="n">PC / jour</th><th class="n">PC cumulés</th></tr></thead><tbody id="sPlanning"></tbody></table></div>
       </section>
@@ -2729,6 +2732,87 @@ if (typeof module !== 'undefined') module.exports = Moteur;
     if (k === 'niveau') majActuels();
   });
 
+  // ---------- export Excel : résumé, planning du moteur, ma stratégie ----------
+  // La bibliothèque SheetJS n'est chargée qu'au premier export (250 Ko).
+  var XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js';
+  function chargerXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    return new Promise(function (ok, ko) {
+      var s = document.createElement('script'); s.src = XLSX_URL;
+      s.onload = function () { window.XLSX ? ok(window.XLSX) : ko(new Error('bibliothèque absente')); };
+      s.onerror = function () { ko(new Error('chargement impossible (hors ligne ?)')); };
+      document.head.appendChild(s);
+    });
+  }
+  // heure du serveur → date Excel (mêmes chiffres que dans l'appli, sans décalage de fuseau)
+  function dateXl(ms) { var d = new Date(ms); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes()); }
+  function heures(s) { return s == null ? '' : Math.round(s / 36) / 100; }
+  function lignesXl(journal, base, opt) {
+    var tete = ['Date (serveur)'].concat(opt.ligne ? ['Ligne'] : [], ['Action', 'Bois', 'Argile', 'Fer', 'Céréales', 'Coût total', 'Ressources réunies', 'Attente (h)', 'Marchand PNJ', 'Durée (h)', 'Fin', 'Population', 'PC / jour', 'PC cumulés'], opt.fait ? ['Fait'] : []);
+    var l = [tete], pnj = false, dernier = 0;
+    journal.forEach(function (j) {
+      if (j.type === 'or' && /Marchand/.test(j.label)) { pnj = true; return; }
+      var paye = !!(j.cout && j.type !== 'or');
+      var action = j.label + (j.auto ? ' (ajouté)' : '') + ((j.type === 'tache' || j.type === 'quotidien') && j.gain ? ' · ' + j.gain : '') + (j.or ? ' · ' + j.or + ' or' : '');
+      l.push([dateXl(base + j.t * 1000)].concat(opt.ligne ? [j.ligne !== undefined ? j.ligne + 1 : ''] : [], [action,
+        paye ? j.cout[0] : '', paye ? j.cout[1] : '', paye ? j.cout[2] : '', paye ? j.cout[3] : '', paye ? j.cout[0] + j.cout[1] + j.cout[2] + j.cout[3] : '',
+        paye && j.res != null ? dateXl(base + j.res * 1000) : '', paye ? heures((j.res != null ? j.res : j.t) - dernier) : '', paye ? (pnj ? 'Oui' : 'Non') : '',
+        j.duree ? heures(j.duree) : '', j.fin ? dateXl(base + j.fin * 1000) : '',
+        paye && j.pop != null ? j.pop : '', paye && j.pcj != null ? Math.round(j.pcj) : '', j.pc != null && (paye || j.type === 'fete') ? Math.floor(j.pc) : ''],
+        opt.fait ? [faits[j.label] ? 'Oui' : ''] : []));
+      if (paye) { pnj = false; dernier = j.t; }
+    });
+    return l;
+  }
+  function feuille(XLSX, lignes, largeurs) {
+    var ws = XLSX.utils.aoa_to_sheet(lignes, { cellDates: true, dateNF: 'dd/mm/yyyy hh:mm' });
+    // format des dates (jour et heure) et largeur des colonnes
+    Object.keys(ws).forEach(function (k) { var c = ws[k]; if (c && c.t === 'd') c.z = 'dd/mm/yyyy hh:mm'; });
+    ws['!cols'] = largeurs.map(function (w) { return { wch: w }; });
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lignes.length - 1, c: lignes[0].length - 1 } }) };
+    return ws;
+  }
+  function exporterExcel() {
+    var m = resultat && resultat.r && resultat.r.meilleur;
+    if (!(m && m.journal) && !strat.length) { message('Rien à exporter : lancez d’abord le calcul (onglet 3) ou composez votre stratégie (onglet 5).', 'att'); return; }
+    message('Préparation du fichier Excel…', 'ok');
+    chargerXlsx().then(function (XLSX) {
+      var wb = XLSX.utils.book_new(), base = instantCollage() || Date.now(), e = entree();
+      var resume = [['Course au 2e village', ''], ['Exporté le', dateXl(Date.now() + 0) ], ['Collage (heure du serveur)', instantCollage() ? dateXl(base) : ''], ['Peuple', NOMS_TRIBU[e.tribu] || e.tribu], ['', '']];
+      if (m && m.journal) {
+        resume.push(['Plan du moteur', m.nom || 'recherche du moteur'], ['Départ des colons', isFinite(m.T) ? dateXl(base + m.T * 1000) : 'impossible'], ['Fêtes', m.fetes], ['Héros', m.mode], ['', '']);
+        XLSX.utils.book_append_sheet(wb, feuille(XLSX, lignesXl(m.journal, base, { fait: true }), [17, 52, 8, 8, 8, 9, 10, 17, 10, 12, 9, 17, 11, 9, 11, 6]), 'Planning du moteur');
+      }
+      if (strat.length) {
+        var r = derniereStrat;
+        if (!r) { var es = entree(); es.heros.mode = $('sHeros').value; es.exclusions = []; r = Moteur.strategie(es, strat.map(versMoteur), { auto: $('sAuto').checked }); }
+        resume.push(['Ma stratégie', strat.length + ' lignes'], ['Départ des colons', r.depart !== null ? dateXl(base + r.depart * 1000) : 'pas de départ'], ['Tout est terminé', dateXl(base + r.fin * 1000)]);
+        var som = function (a) { return a[0] + a[1] + a[2] + a[3]; };
+        var tete = [['#', 'Action', 'Actuel', 'Visé / nombre', 'Ressources réunies', 'Attente (h)', 'Marchand PNJ', 'Coût total', 'Population', 'PC / jour', 'PC cumulés', 'Faisable', 'Raison']];
+        strat.forEach(function (l, k) {
+          var x = r.lignes[k] || {};
+          var nom = document.querySelector('#sLignes tr[data-l="' + k + '"]');
+          var libelle = nom ? ((nom.querySelector('select') && nom.querySelector('select').selectedOptions[0].text) || nom.children[1].innerText).trim() : l.t;
+          var rien = x.ok && x.debut === null && x.faits === 0 && l.t !== 'depart';
+          tete.push([k + 1, libelle, nom ? nom.children[2].innerText.trim() : '', l.t === 'depart' ? '' : (l.niveau || l.n),
+            !rien && x.ressources != null ? dateXl(base + x.ressources * 1000) : '', !rien && x.ressources != null ? heures(x.ressources - x.t0) : '', !rien && x.ressources != null ? (x.pnj > 0 ? 'Oui' : 'Non') : '',
+            x.cout ? som(x.cout) : '', x.pop != null ? x.pop : '', x.pcj != null ? Math.round(x.pcj) : '', x.pc != null ? Math.floor(x.pc) : '',
+            rien ? 'Déjà atteint' : x.ok ? 'Oui' : 'Non', x.ok ? '' : (x.raison || '')]);
+        });
+        XLSX.utils.book_append_sheet(wb, feuille(XLSX, tete, [4, 32, 8, 12, 17, 11, 12, 11, 11, 9, 11, 12, 50]), 'Ma stratégie');
+        XLSX.utils.book_append_sheet(wb, feuille(XLSX, lignesXl(r.journal, base, { ligne: true }), [17, 6, 52, 8, 8, 8, 9, 10, 17, 10, 12, 9, 17, 11, 9, 11]), 'Ma stratégie (détail)');
+      }
+      var wr = XLSX.utils.aoa_to_sheet(resume, { cellDates: true, dateNF: 'dd/mm/yyyy hh:mm' });
+      Object.keys(wr).forEach(function (k) { var c = wr[k]; if (c && c.t === 'd') c.z = 'dd/mm/yyyy hh:mm'; });
+      wr['!cols'] = [{ wch: 28 }, { wch: 34 }];
+      XLSX.utils.book_append_sheet(wb, wr, 'Résumé');
+      wb.SheetNames.unshift(wb.SheetNames.pop()); // le résumé en premier
+      var d = new Date();
+      XLSX.writeFile(wb, 'course-2e-village-' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '-' + pad(d.getHours()) + 'h' + pad(d.getMinutes()) + '.xlsx', { cellDates: true });
+      message('Fichier Excel téléchargé.', 'ok');
+    }).catch(function (x) { message('Export Excel impossible : ' + x.message + '.', 'err'); });
+  }
+  document.querySelectorAll('[data-excel]').forEach(function (b) { b.onclick = exporterExcel; });
   // ---------- nouvelle version en ligne ----------
   (function () {
     var ici = (document.querySelector('meta[name=version]') || {}).content;
